@@ -180,6 +180,157 @@ module Vinter
       }
     end
 
+    def parse_while_statement
+      token = advance # Skip 'while'
+      line = token[:line]
+      column = token[:column]
+      condition = parse_expression
+
+      body = []
+
+      # Parse statements until we hit 'endwhile'
+      while @position < @tokens.length
+        if current_token[:type] == :keyword && current_token[:value] == 'endwhile'
+          break
+        end
+
+        stmt = parse_statement
+        body << stmt if stmt
+      end
+
+      # Expect endwhile
+      expect(:keyword) # This should be 'endwhile'
+
+      {
+        type: :while_statement,
+        condition: condition,
+        body: body,
+        line: line,
+        column: column
+      }
+    end
+
+    def parse_for_statement
+      token = advance # Skip 'for'
+      line = token[:line]
+      column = token[:column]
+
+      # Parse the loop variable(s)
+      if current_token && current_token[:type] == :paren_open
+        # Handle tuple assignment: for (key, val) in dict
+        advance # Skip '('
+
+        loop_vars = []
+
+        loop do
+          if current_token && current_token[:type] == :identifier
+            loop_vars << advance[:value]
+          else
+            @errors << {
+              message: "Expected identifier in for loop variables",
+              position: @position,
+              line: current_token ? current_token[:line] : 0,
+              column: current_token ? current_token[:column] : 0
+            }
+            break
+          end
+
+          if current_token && current_token[:type] == :comma
+            advance # Skip ','
+          else
+            break
+          end
+        end
+
+        expect(:paren_close) # Skip ')'
+
+        if !current_token || (current_token[:type] != :identifier || current_token[:value] != 'in')
+          @errors << {
+            message: "Expected 'in' after for loop variables",
+            position: @position,
+            line: current_token ? current_token[:line] : 0,
+            column: current_token ? current_token[:column] : 0
+          }
+        else
+          advance # Skip 'in'
+        end
+
+        iterable = parse_expression
+
+        # Parse the body until 'endfor'
+        body = []
+        while @position < @tokens.length
+          if current_token[:type] == :keyword && current_token[:value] == 'endfor'
+            break
+          end
+
+          stmt = parse_statement
+          body << stmt if stmt
+        end
+
+        # Expect endfor
+        expect(:keyword) # This should be 'endfor'
+
+        return {
+          type: :for_statement,
+          loop_vars: loop_vars,
+          iterable: iterable,
+          body: body,
+          line: line,
+          column: column
+        }
+      else
+        # Simple for var in list
+        if !current_token || current_token[:type] != :identifier
+          @errors << {
+            message: "Expected identifier as for loop variable",
+            position: @position,
+            line: current_token ? current_token[:line] : 0,
+            column: current_token ? current_token[:column] : 0
+          }
+          return nil
+        end
+
+        loop_var = advance[:value]
+
+        if !current_token || (current_token[:type] != :identifier || current_token[:value] != 'in')
+          @errors << {
+            message: "Expected 'in' after for loop variable",
+            position: @position,
+            line: current_token ? current_token[:line] : 0,
+            column: current_token ? current_token[:column] : 0
+          }
+        else
+          advance # Skip 'in'
+        end
+
+        iterable = parse_expression
+
+        # Parse the body until 'endfor'
+        body = []
+        while @position < @tokens.length
+          if current_token[:type] == :keyword && current_token[:value] == 'endfor'
+            break
+          end
+
+          stmt = parse_statement
+          body << stmt if stmt
+        end
+
+        # Expect endfor
+        expect(:keyword) # This should be 'endfor'
+
+        return {
+          type: :for_statement,
+          loop_var: loop_var,
+          iterable: iterable,
+          body: body,
+          line: line,
+          column: column
+        }
+      end
+    end
+
     def parse_def_function
       token = advance # Skip 'def'
       line = token[:line]
@@ -541,23 +692,23 @@ module Vinter
       token = advance # Skip 'import'
       line = token[:line]
       column = token[:column]
-      
+
       # Handle 'import autoload'
       is_autoload = false
       module_name = nil
       path = nil
-      
+
       if current_token && current_token[:type] == :identifier && current_token[:value] == 'autoload'
         is_autoload = true
         module_name = advance[:value]  # Store "autoload" as the module name
-        
+
         # After "autoload" keyword, expect a string path
         if current_token && current_token[:type] == :string
           path = current_token[:value]
           advance
         else
-          @errors << { 
-            message: "Expected string path after 'autoload'", 
+          @errors << {
+            message: "Expected string path after 'autoload'",
             position: @position,
             line: current_token ? current_token[:line] : 0,
             column: current_token ? current_token[:column] : 0
@@ -567,11 +718,11 @@ module Vinter
         # Regular import with a string path
         if current_token && current_token[:type] == :string
           path = current_token[:value]
-          
+
           # Extract module name from the path
           # This is simplified logic - you might need more complex extraction
           module_name = path.gsub(/['"]/, '').split('/').last.split('.').first
-          
+
           advance
         else
           # Handle other import formats
@@ -582,7 +733,7 @@ module Vinter
           end
         end
       end
-      
+
       # Handle 'as name'
       as_name = nil
       if current_token && current_token[:type] == :identifier && current_token[:value] == 'as'
@@ -590,17 +741,17 @@ module Vinter
         if current_token && current_token[:type] == :identifier
           as_name = advance[:value]
         else
-          @errors << { 
-            message: "Expected identifier after 'as'", 
+          @errors << {
+            message: "Expected identifier after 'as'",
             position: @position,
             line: current_token ? current_token[:line] : 0,
             column: current_token ? current_token[:column] : 0
           }
         end
       end
-      
-      { 
-        type: :import_statement, 
+
+      {
+        type: :import_statement,
         module: module_name,
         path: path,
         is_autoload: is_autoload,
@@ -608,7 +759,7 @@ module Vinter
         line: line,
         column: column
       }
-    end    
+    end
     def parse_export_statement
       token = advance # Skip 'export'
       line = token[:line]

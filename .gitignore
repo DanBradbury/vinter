@@ -1,0 +1,52 @@
+# Ruby gem specific
+*.gem
+*.rbc
+/.config
+/coverage/
+/InstalledFiles
+/pkg/
+/spec/reports/
+/spec/examples.txt
+/test/tmp/
+/test/version_tmp/
+/tmp/
+
+# Documentation
+/.yardoc/
+/_yardoc/
+/doc/
+/rdoc/
+
+# Environment normalization
+/.bundle/
+/vendor/bundle
+/lib/bundler/man/
+.ruby-version
+.ruby-gemset
+.rvmrc
+
+# Development tools
+.byebug_history
+.pry_history
+.env
+
+# OS specific files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Editor files
+*.swp
+*.swo
+*~
+.idea/
+.vscode/
+*.sublime-project
+*.sublime-workspace
+
+# Specific to your project
+Gemfile.lock
