@@ -705,7 +705,7 @@ module Vinter
     end
 
     def parse_binary_expression(precedence = 0)
-      left = parse_primary_expression
+      left = parse_unary_expression
 
       # Handle multi-line expressions where operators may appear at line beginnings
       while current_token &&
@@ -756,6 +756,10 @@ module Vinter
         5
       when '*', '/', '%'  # Multiplication, division, modulo
         6
+      when '.'
+        7
+      when '!'
+        8
       else
         0
       end
@@ -1272,25 +1276,66 @@ module Vinter
       }
     end
 
+    def parse_unary_expression
+      # Check for unary operators (!, -, +)
+      if current_token && current_token[:type] == :operator &&
+         ['!', '-', '+'].include?(current_token[:value])
+
+        op_token = advance # Skip the operator
+        operand = parse_unary_expression  # Recursively parse the operand
+
+        return {
+          type: :unary_expression,
+          operator: op_token[:value],
+          operand: operand,
+          line: op_token[:line],
+          column: op_token[:column]
+        }
+      end
+
+      # If no unary operator, parse a primary expression
+      return parse_primary_expression
+    end
+
     def parse_function_call(name, line, column)
       expect(:paren_open)
 
       args = []
 
-      # Parse arguments
-      unless current_token && current_token[:type] == :paren_close
-        loop do
-          # Check if the argument might be a lambda expression
-          if current_token && current_token[:type] == :paren_open && is_lambda_expression
-            arg = parse_lambda_expression(current_token[:line], current_token[:column])
-          else
-            arg = parse_expression
-          end
+      # Parse arguments until we find a closing parenthesis
+      while @position < @tokens.length && current_token && current_token[:type] != :paren_close
+        # Skip comments inside parameter lists
+        if current_token && current_token[:type] == :comment
+          advance
+          next
+        end
 
-          args << arg if arg
+        # Check if the argument might be a lambda expression
+        if current_token && current_token[:type] == :paren_open && is_lambda_expression
+          arg = parse_lambda_expression(current_token[:line], current_token[:column])
+        else
+          arg = parse_expression
+        end
 
-          break unless current_token && current_token[:type] == :comma
-          advance  # Skip comma
+        args << arg if arg
+
+        # Break if we hit the closing paren
+        if current_token && current_token[:type] == :paren_close
+          break
+        end
+
+        # If we have a comma, advance past it and continue
+        if current_token && current_token[:type] == :comma
+          advance
+        # If we don't have a comma and we're not at the end, it's an error
+        elsif current_token && current_token[:type] != :paren_close && current_token[:type] != :comment
+          @errors << {
+            message: "Expected comma or closing parenthesis after argument",
+            position: @position,
+            line: current_token[:line],
+            column: current_token[:column]
+          }
+          break
         end
       end
 

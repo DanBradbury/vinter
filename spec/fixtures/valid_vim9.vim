@@ -67,4 +67,37 @@ enddef
 echo [1,
   2] [3,
     4]
+Func(arg)	   # OK
+Func(
+      arg)	   # OK
+Func(
+      arg	   # OK
+      )
+var dict = {key: value}
+var dict = {'key with space': value}
+var dict = {"key\twith\ttabs": value}
+var dict = {'': value}			# empty key
+1 || false   == true
+0 || 1       == true
+0 || false   == false
+1 && true    == true
+0 && 1       == false
+!'yes'			== false
+!![]			== false
+!![1, 2, 3]		== true
+'hello ' .. 123  == 'hello 123'
+'hello ' .. v:true  == 'hello true'
+true
+false
+null
+null_blob
+null_channel
+null_class
+null_dict
+null_function
+null_job
+null_list
+null_object
+null_partial
+null_string
 
