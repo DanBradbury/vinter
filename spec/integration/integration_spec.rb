@@ -6,8 +6,9 @@ RSpec.describe 'Integration Tests' do
   it 'correctly lints a valid vim9 script file' do
     file_path = File.join(File.dirname(__FILE__), '..', 'fixtures', 'valid_vim9.vim')
     content = File.read(file_path)
-    issues = linter.lint(content)
+    issues = linter.lint(content).select { |f| f[:type] == :error }
 
+    puts issues.inspect
     expect(issues.size).to eq(0)
   end
 

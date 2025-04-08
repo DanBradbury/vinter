@@ -36,33 +36,45 @@ module Vinter
     def tokenize
       until @position >= @input.length
         chunk = @input[@position..-1]
-        
-        # Handle multi-character operators explicitly
-        if match = chunk.match(/\A(==|!=|=>|->|\.\.)/)
-          @tokens << { 
-            type: :operator, 
-            value: match[0], 
-            line: @line_num, 
-            column: @column 
+        # Handle compound assignment operators
+        if match = chunk.match(/\A(\+=|-=|\*=|\/=|\.\.=)/)
+          @tokens << {
+            type: :compound_operator,
+            value: match[0],
+            line: @line_num,
+            column: @column
           }
           @column += match[0].length
           @position += match[0].length
           next
         end
-        
+
+        # Handle multi-character operators explicitly
+        if match = chunk.match(/\A(==|!=|=>|->|\.\.)/)
+          @tokens << {
+            type: :operator,
+            value: match[0],
+            line: @line_num,
+            column: @column
+          }
+          @column += match[0].length
+          @position += match[0].length
+          next
+        end
+
         # Handle ellipsis for variable args
         if chunk.start_with?('...')
-          @tokens << { 
-            type: :ellipsis, 
-            value: '...', 
-            line: @line_num, 
-            column: @column 
+          @tokens << {
+            type: :ellipsis,
+            value: '...',
+            line: @line_num,
+            column: @column
           }
           @column += 3
           @position += 3
           next
         end
-        
+
         # Skip whitespace but track position
         if match = chunk.match(/\A(\s+)/)
           whitespace = match[0]
@@ -77,20 +89,20 @@ module Vinter
           @position += whitespace.length
           next
         end
-        
+
         match_found = false
-        
+
         TOKEN_TYPES.each do |type, pattern|
           if match = chunk.match(/\A(#{pattern})/)
             value = match[0]
-            token = { 
-              type: type, 
-              value: value, 
-              line: @line_num, 
-              column: @column 
+            token = {
+              type: type,
+              value: value,
+              line: @line_num,
+              column: @column
             }
             @tokens << token unless type == :whitespace
-            
+
             # Update position
             if value.include?("\n")
               lines = value.split("\n")
@@ -103,33 +115,33 @@ module Vinter
             else
               @column += value.length
             end
-            
+
             @position += value.length
             match_found = true
             break
           end
         end
-        
+
         unless match_found
           # Try to handle unknown characters
-          @tokens << { 
-            type: :unknown, 
-            value: chunk[0], 
-            line: @line_num, 
-            column: @column 
+          @tokens << {
+            type: :unknown,
+            value: chunk[0],
+            line: @line_num,
+            column: @column
           }
-          
+
           if chunk[0] == "\n"
             @line_num += 1
             @column = 1
           else
             @column += 1
           end
-          
+
           @position += 1
         end
       end
-      
+
       @tokens
     end
   end

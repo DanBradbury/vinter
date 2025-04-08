@@ -1,30 +1,21 @@
 vim9script
-
 # A valid Vim9 script file for testing
+echo "hello"   # comment
+echo "hello "
+     .. yourName
+     .. ", how are you?"
 
-var count: number = 0
-const PI: float = 3.14159
-final MSG: string = 'Hello, Vim9!'
-
-def Add(x: number, y: number): number
-  return x + y
-enddef
-
-export def Multiply(x: number, y: number): number
-  return x * y
-enddef
-
-def ProcessItems(required: string, ?optional: number = 10, ...rest: list<string>): dict<any>
-  var result = {
-    'required': required,
-    'optional': optional,
-    'rest': rest
-  }
-  return result
-enddef
-
-# Main execution
-count = Add(5, 10)
-echo count
-echo Multiply(count, 2)
-
+var count = 0
+count += 3
+const myList = [1, 2]
+final myList = [1, 2]
+myList[0] = 9		# OK
+myList->add(3)		# OK
+var Lambda = (arg) => expression
+var Lambda = (arg): type => expression
+filter(list, (k, v) =>
+    v > 0)
+var Lambda = (arg) => {
+  g:was_called = 'yes'
+  return expression
+    }

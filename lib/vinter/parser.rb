@@ -104,7 +104,11 @@ module Vinter
           nil
         end
       elsif current_token[:type] == :identifier
-        parse_expression_statement
+        if current_token[:value] == "echo"
+          parse_echo_statement
+        else
+          parse_expression_statement
+        end
       elsif current_token[:type] == :comment
         parse_comment
       else
@@ -117,6 +121,21 @@ module Vinter
         advance
         nil
       end
+    end
+
+    def parse_echo_statement
+      token = advance #Skip 'echo'
+      line = token[:line]
+      column = token[:column]
+
+      expression = parse_expression
+
+      {
+        type: :echo_statement,
+        expression: expression,
+        line: line,
+        column: column
+      }
     end
 
     def parse_comment
@@ -548,6 +567,39 @@ module Vinter
     end
 
     def parse_expression_statement
+      # Check if this is an assignment using a compound operator
+      if current_token && current_token[:type] == :identifier
+        variable_name = current_token[:value]
+        variable_token = current_token
+        advance  # Move past the identifier
+
+        if current_token && current_token[:type] == :compound_operator
+          operator = current_token[:value]
+          operator_token = current_token
+          advance  # Move past the operator
+
+          right = parse_expression
+
+          return {
+            type: :compound_assignment,
+            operator: operator,
+            target: {
+              type: :identifier,
+              name: variable_name,
+              line: variable_token[:line],
+              column: variable_token[:column]
+            },
+            value: right,
+            line: operator_token[:line],
+            column: operator_token[:column]
+          }
+        end
+
+        # If it wasn't a compound assignment, backtrack
+        @position -= 1
+      end
+
+      # Regular expression statement handling
       expr = parse_expression
       {
         type: :expression_statement,
@@ -645,10 +697,18 @@ module Vinter
           column: column
         }
       when :paren_open
-        advance  # Skip '('
-        expr = parse_expression
-        expect(:paren_close)  # Expect and skip ')'
-        return expr
+        if is_lambda_expression
+          return parse_lambda_expression(line, column)
+        else
+          advance  # Skip '('
+          expr = parse_expression
+          expect(:paren_close)  # Expect and skip ')'
+          return expr
+        end
+      when :bracket_open
+        return parse_list_literal(line, column)
+      when :brace_open
+        return parse_dict_literal(line, column)
       else
         @errors << {
           message: "Unexpected token in expression: #{token[:type]}",
@@ -661,6 +721,247 @@ module Vinter
       end
     end
 
+    def is_lambda_expression
+      # Save the current position
+      original_position = @position
+
+      # Skip the opening parenthesis
+      advance if current_token && current_token[:type] == :paren_open
+
+      # Check for a parameter list followed by => or ): =>
+      has_params = false
+      has_arrow = false
+
+      # Skip past parameters
+      loop do
+        break if !current_token
+
+        if current_token[:type] == :identifier
+          has_params = true
+          advance
+
+          # Either comma for another parameter, or close paren
+          if current_token && current_token[:type] == :comma
+            advance
+          elsif current_token && current_token[:type] == :paren_close
+            advance
+            break
+          else
+            # Not a valid lambda parameter list
+            break
+          end
+        elsif current_token[:type] == :paren_close
+          # Empty parameter list is valid
+          advance
+          break
+        else
+          # Not a valid lambda parameter list
+          break
+        end
+      end
+
+      # After parameters, check for either => or ): =>
+      if current_token
+        if current_token[:type] == :operator && current_token[:value] == '=>'
+          has_arrow = true
+        elsif current_token[:type] == :colon
+          # There might be a return type annotation
+          advance
+          # Skip the type
+          advance if current_token && current_token[:type] == :identifier
+          # Check for the arrow
+          has_arrow = current_token && current_token[:type] == :operator && current_token[:value] == '=>'
+        end
+      end
+
+      # Reset position to where we started
+      @position = original_position
+
+      return has_params && has_arrow
+    end
+
+    def parse_lambda_expression(line, column)
+      expect(:paren_open)  # Skip '('
+
+      params = []
+
+      # Parse parameters
+      unless current_token && current_token[:type] == :paren_close
+        loop do
+          if current_token && current_token[:type] == :identifier
+            param_name = current_token[:value]
+            param_token = current_token
+            advance
+
+            # Check for type annotation
+            param_type = nil
+            if current_token && current_token[:type] == :colon
+              advance  # Skip ':'
+              param_type = parse_type
+            end
+
+            params << {
+              type: :parameter,
+              name: param_name,
+              param_type: param_type,
+              line: param_token[:line],
+              column: param_token[:column]
+            }
+          else
+            @errors << {
+              message: "Expected parameter name in lambda expression",
+              position: @position,
+              line: current_token ? current_token[:line] : 0,
+              column: current_token ? current_token[:column] : 0
+            }
+            break
+          end
+
+          if current_token && current_token[:type] == :comma
+            advance  # Skip comma
+          else
+            break
+          end
+        end
+      end
+
+      expect(:paren_close)  # Skip ')'
+
+      # Check for return type annotation
+      return_type = nil
+      if current_token && current_token[:type] == :colon
+        advance  # Skip ':'
+        return_type = parse_type
+      end
+
+      # Expect the arrow '=>'
+      arrow_found = false
+      if current_token && current_token[:type] == :operator && current_token[:value] == '=>'
+        arrow_found = true
+        advance  # Skip '=>'
+      else
+        @errors << {
+          message: "Expected '=>' in lambda expression",
+          position: @position,
+          line: current_token ? current_token[:line] : 0,
+          column: current_token ? current_token[:column] : 0
+        }
+      end
+
+      # Parse the lambda body
+      body = arrow_found ? parse_expression : nil
+
+      return {
+        type: :lambda_expression,
+        params: params,
+        return_type: return_type,
+        body: body,
+        line: line,
+        column: column
+      }
+    end
+
+    def parse_dict_literal(line, column)
+      advance  # Skip '{'
+      entries = []
+
+      # Empty dictionary
+      if current_token && current_token[:type] == :brace_close
+        advance  # Skip '}'
+        return {
+          type: :dict_literal,
+          entries: entries,
+          line: line,
+          column: column
+        }
+      end
+
+      # Parse dictionary entries
+      loop do
+        # Parse key (string or identifier)
+        key = nil
+        if current_token && (current_token[:type] == :string || current_token[:type] == :identifier)
+          key = current_token[:type] == :string ? current_token[:value] : current_token[:value]
+          advance  # Skip key
+        else
+          @errors << {
+            message: "Expected string or identifier as dictionary key",
+            position: @position,
+            line: current_token ? current_token[:line] : 0,
+            column: current_token ? current_token[:column] : 0
+          }
+          break
+        end
+
+        # Expect colon
+        expect(:colon)
+
+        # Parse value
+        value = parse_expression
+
+        entries << {
+          key: key,
+          value: value
+        }
+
+        if current_token && current_token[:type] == :comma
+          advance  # Skip comma
+          # Allow trailing comma
+          break if current_token && current_token[:type] == :brace_close
+        else
+          break
+        end
+      end
+
+      expect(:brace_close)  # Expect and skip '}'
+
+      {
+        type: :dict_literal,
+        entries: entries,
+        line: line,
+        column: column
+      }
+    end
+
+    def parse_list_literal(line, column)
+      advance  # Skip '['
+      elements = []
+
+      # Empty list
+      if current_token && current_token[:type] == :bracket_close
+        advance  # Skip ']'
+        return {
+          type: :list_literal,
+          elements: elements,
+          line: line,
+          column: column
+        }
+      end
+
+      # Parse list elements
+      loop do
+        element = parse_expression
+        elements << element if element
+
+        if current_token && current_token[:type] == :comma
+          advance  # Skip comma
+          # Allow trailing comma
+          break if current_token && current_token[:type] == :bracket_close
+        else
+          break
+        end
+      end
+
+      expect(:bracket_close)  # Expect and skip ']'
+
+      {
+        type: :list_literal,
+        elements: elements,
+        line: line,
+        column: column
+      }
+    end
+
     def parse_function_call(name, line, column)
       expect(:paren_open)
 
@@ -669,7 +970,13 @@ module Vinter
       # Parse arguments
       unless current_token && current_token[:type] == :paren_close
         loop do
-          arg = parse_expression
+          # Check if the argument might be a lambda expression
+          if current_token && current_token[:type] == :paren_open && is_lambda_expression
+            arg = parse_lambda_expression(current_token[:line], current_token[:column])
+          else
+            arg = parse_expression
+          end
+
           args << arg if arg
 
           break unless current_token && current_token[:type] == :comma
