@@ -93,6 +93,8 @@ module Vinter
         when 'vim9script'
           token = advance # Skip 'vim9script'
           { type: :vim9script_declaration, line: token[:line], column: token[:column] }
+        when 'autocmd'
+          parse_autocmd_statement
         else
           @warnings << {
             message: "Unexpected keyword: #{current_token[:value]}",
@@ -121,6 +123,77 @@ module Vinter
         advance
         nil
       end
+    end
+
+    def parse_autocmd_statement
+      token = advance # Skip 'autocmd'
+      line = token[:line]
+      column = token[:column]
+
+      # Parse event name (like BufNewFile)
+      event = nil
+      if current_token && current_token[:type] == :identifier
+        event = advance[:value]
+      else
+        @errors << {
+          message: "Expected event name after 'autocmd'",
+          position: @position,
+          line: current_token ? current_token[:line] : 0,
+          column: current_token ? current_token[:column] : 0
+        }
+      end
+
+      # Parse pattern (like *.match)
+      pattern = nil
+      if current_token
+        pattern = current_token[:value]
+        advance
+      end
+
+      # Parse command (can be complex, including if statements)
+      commands = []
+
+      # Handle pipe-separated commands
+      in_command = true
+      while in_command && @position < @tokens.length
+        if current_token && current_token[:value] == '|'
+          advance # Skip '|'
+        end
+
+        # Parse the command
+        if current_token && current_token[:type] == :keyword
+          case current_token[:value]
+          when 'if'
+            commands << parse_if_statement
+          when 'echo'
+            commands << parse_echo_statement
+          # Add other command types as needed
+          else
+            # Generic command handling
+            cmd = parse_expression_statement
+            commands << cmd if cmd
+          end
+        elsif current_token && current_token[:type] == :identifier
+          cmd = parse_expression_statement
+          commands << cmd if cmd
+        else
+          in_command = false
+        end
+
+        # Check if we've reached the end of the autocmd command
+        if !current_token || current_token[:type] == :comment || current_token[:value] == "\n"
+          in_command = false
+        end
+      end
+
+      return {
+        type: :autocmd_statement,
+        event: event,
+        pattern: pattern,
+        commands: commands,
+        line: line,
+        column: column
+      }
     end
 
     def parse_echo_statement
@@ -394,8 +467,6 @@ module Vinter
       }
     end
 
-
-
     def parse_parameter_list
       params = []
 
@@ -404,7 +475,8 @@ module Vinter
         return params
       end
 
-      loop do
+      # Parse parameters until we find a closing parenthesis
+      while @position < @tokens.length && current_token && current_token[:type] != :paren_close
         # Check for variable args
         if current_token && current_token[:type] == :ellipsis
           ellipsis_token = advance
@@ -422,6 +494,17 @@ module Vinter
             line: ellipsis_token[:line],
             column: ellipsis_token[:column]
           }
+
+          # After varargs, we expect closing paren
+          if current_token && current_token[:type] != :paren_close
+            @errors << {
+              message: "Expected closing parenthesis after varargs",
+              position: @position,
+              line: current_token[:line],
+              column: current_token[:column]
+            }
+          end
+
           break
         end
 
@@ -456,15 +539,23 @@ module Vinter
           type: :parameter,
           name: param_name[:value],
           param_type: param_type,
-          optional: false, # Set this based on default value
+          optional: default_value != nil,
           default_value: default_value,
           line: param_name[:line],
           column: param_name[:column]
         }
 
+        # If we have a comma, advance past it and continue
         if current_token && current_token[:type] == :comma
           advance
-        else
+        # If we don't have a comma, we should have a closing paren
+        elsif current_token && current_token[:type] != :paren_close
+          @errors << {
+            message: "Expected comma or closing parenthesis after parameter",
+            position: @position,
+            line: current_token[:line],
+            column: current_token[:column]
+          }
           break
         end
       end
@@ -616,22 +707,36 @@ module Vinter
     def parse_binary_expression(precedence = 0)
       left = parse_primary_expression
 
-      while current_token && current_token[:type] == :operator &&
-            operator_precedence(current_token[:value]) >= precedence
-        op_token = advance
-        op = op_token[:value]
-        op_precedence = operator_precedence(op)
+      # Handle multi-line expressions where operators may appear at line beginnings
+      while current_token &&
+            (current_token[:type] == :operator ||
+             (peek_token && peek_token[:type] == :operator && current_token[:type] == :whitespace))
 
-        right = parse_binary_expression(op_precedence + 1)
+        # Skip any whitespace before the operator if it's at the beginning of a line
+        if current_token[:type] == :whitespace
+          advance
+        end
 
-        left = {
-          type: :binary_expression,
-          operator: op,
-          left: left,
-          right: right,
-          line: op_token[:line],
-          column: op_token[:column]
-        }
+        # Now we should be at the operator
+        if current_token && current_token[:type] == :operator &&
+           operator_precedence(current_token[:value]) >= precedence
+          op_token = advance
+          op = op_token[:value]
+          op_precedence = operator_precedence(op)
+
+          right = parse_binary_expression(op_precedence + 1)
+
+          left = {
+            type: :binary_expression,
+            operator: op,
+            left: left,
+            right: right,
+            line: op_token[:line],
+            column: op_token[:column]
+          }
+        else
+          break
+        end
       end
 
       return left
@@ -663,10 +768,13 @@ module Vinter
       line = token[:line]
       column = token[:column]
 
+      # First parse the basic expression
+      expr = nil
+
       case token[:type]
       when :number
         advance
-        {
+        expr = {
           type: :literal,
           value: token[:value],
           token_type: :number,
@@ -675,7 +783,7 @@ module Vinter
         }
       when :string
         advance
-        {
+        expr = {
           type: :literal,
           value: token[:value],
           token_type: :string,
@@ -690,7 +798,7 @@ module Vinter
           return parse_function_call(token[:value], line, column)
         end
 
-        {
+        expr = {
           type: :identifier,
           name: token[:value],
           line: line,
@@ -703,12 +811,11 @@ module Vinter
           advance  # Skip '('
           expr = parse_expression
           expect(:paren_close)  # Expect and skip ')'
-          return expr
         end
       when :bracket_open
-        return parse_list_literal(line, column)
+        expr = parse_list_literal(line, column)
       when :brace_open
-        return parse_dict_literal(line, column)
+        expr = parse_dict_literal(line, column)
       else
         @errors << {
           message: "Unexpected token in expression: #{token[:type]}",
@@ -719,6 +826,131 @@ module Vinter
         advance
         return nil
       end
+
+      # Now handle any chained property access or method calls
+      while current_token
+        # Check for property access with dot
+        if current_token[:type] == :operator && current_token[:value] == '.'
+          dot_token = advance # Skip '.'
+
+          # Next token should be an identifier (property name)
+          if !current_token || current_token[:type] != :identifier
+            @errors << {
+              message: "Expected property name after '.'",
+              position: @position,
+              line: current_token ? current_token[:line] : 0,
+              column: current_token ? current_token[:column] : 0
+            }
+            break
+          end
+
+          property_token = advance # Get property name
+
+          expr = {
+            type: :property_access,
+            object: expr,
+            property: property_token[:value],
+            line: dot_token[:line],
+            column: dot_token[:column]
+          }
+        # Check for method call with arrow ->
+        elsif current_token[:type] == :operator && current_token[:value] == '->'
+          arrow_token = advance # Skip '->'
+
+          # Next token should be an identifier (method name)
+          if !current_token || current_token[:type] != :identifier
+            @errors << {
+              message: "Expected method name after '->'",
+              position: @position,
+              line: current_token ? current_token[:line] : 0,
+              column: current_token ? current_token[:column] : 0
+            }
+            break
+          end
+
+          method_name = advance[:value] # Get method name
+
+          # Check for arguments
+          args = []
+          if current_token && current_token[:type] == :paren_open
+            expect(:paren_open) # Skip '('
+
+            # Parse arguments if any
+            unless current_token && current_token[:type] == :paren_close
+              loop do
+                arg = parse_expression
+                args << arg if arg
+
+                if current_token && current_token[:type] == :comma
+                  advance # Skip comma
+                else
+                  break
+                end
+              end
+            end
+
+            expect(:paren_close) # Skip ')'
+          end
+
+          expr = {
+            type: :method_call,
+            object: expr,
+            method: method_name,
+            arguments: args,
+            line: arrow_token[:line],
+            column: arrow_token[:column]
+          }
+        # Check for indexing with brackets
+        elsif current_token[:type] == :bracket_open
+          bracket_token = advance # Skip '['
+
+          index_expr = parse_expression
+
+          expect(:bracket_close) # Skip ']'
+
+          expr = {
+            type: :indexed_access,
+            object: expr,
+            index: index_expr,
+            line: bracket_token[:line],
+            column: bracket_token[:column]
+          }
+        # Check for function call directly on an expression
+        elsif current_token[:type] == :paren_open
+          paren_token = advance # Skip '('
+
+          args = []
+
+          # Parse arguments if any
+          unless current_token && current_token[:type] == :paren_close
+            loop do
+              arg = parse_expression
+              args << arg if arg
+
+              if current_token && current_token[:type] == :comma
+                advance # Skip comma
+              else
+                break
+              end
+            end
+          end
+
+          expect(:paren_close) # Skip ')'
+
+          expr = {
+            type: :call_expression,
+            callee: expr,
+            arguments: args,
+            line: paren_token[:line],
+            column: paren_token[:column]
+          }
+        else
+          # No more chaining
+          break
+        end
+      end
+
+      return expr
     end
 
     def is_lambda_expression
@@ -848,8 +1080,50 @@ module Vinter
         }
       end
 
-      # Parse the lambda body
-      body = arrow_found ? parse_expression : nil
+      # Parse the lambda body - check if it's a block or an expression
+      if arrow_found
+        if current_token && current_token[:type] == :brace_open
+          # Parse block body
+          advance  # Skip '{'
+
+          block_body = []
+          brace_count = 1  # Track nested braces
+
+          while @position < @tokens.length && brace_count > 0
+            if current_token[:type] == :brace_open
+              brace_count += 1
+            elsif current_token[:type] == :brace_close
+              brace_count -= 1
+
+              # Skip the final closing brace, but don't process it as a statement
+              if brace_count == 0
+                advance
+                break
+              end
+            end
+
+            stmt = parse_statement
+            block_body << stmt if stmt
+
+            # Break if we've reached the end or found the matching closing brace
+            if brace_count == 0 || @position >= @tokens.length
+              break
+            end
+          end
+
+          body = {
+            type: :block_expression,
+            statements: block_body,
+            line: line,
+            column: column
+          }
+        else
+          # Simple expression body
+          body = parse_expression
+        end
+      else
+        body = nil
+      end
 
       return {
         type: :lambda_expression,
@@ -939,22 +1213,58 @@ module Vinter
       end
 
       # Parse list elements
-      loop do
+      while @position < @tokens.length
+        # Check if we've reached the end of the list
+        if current_token && current_token[:type] == :bracket_close
+          advance  # Skip ']'
+          break
+        end
+
         element = parse_expression
         elements << element if element
 
+        # Continue if there's a comma
         if current_token && current_token[:type] == :comma
           advance  # Skip comma
-          # Allow trailing comma
-          break if current_token && current_token[:type] == :bracket_close
         else
+          # If no comma and not a closing bracket, then it's an error
+          if current_token && current_token[:type] != :bracket_close
+            @errors << {
+              message: "Expected comma or closing bracket after list element",
+              position: @position,
+              line: current_token[:line],
+              column: current_token[:column]
+            }
+          end
+
+          # We still want to skip the closing bracket if it's there
+          if current_token && current_token[:type] == :bracket_close
+            advance
+          end
+
           break
         end
       end
 
-      expect(:bracket_close)  # Expect and skip ']'
+      # Check if we have a second list immediately following this one (Vim's special syntax)
+      if current_token && current_token[:type] == :bracket_open
+        next_list = parse_list_literal(current_token[:line], current_token[:column])
 
-      {
+        return {
+          type: :list_concat_expression,
+          left: {
+            type: :list_literal,
+            elements: elements,
+            line: line,
+            column: column
+          },
+          right: next_list,
+          line: line,
+          column: column
+        }
+      end
+
+      return {
         type: :list_literal,
         elements: elements,
         line: line,

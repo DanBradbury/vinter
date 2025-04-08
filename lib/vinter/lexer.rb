@@ -2,7 +2,7 @@ module Vinter
   class Lexer
     TOKEN_TYPES = {
       # Vim9 specific keywords
-      keyword: /\b(if|else|elseif|endif|while|endwhile|for|endfor|def|enddef|function|endfunction|return|const|var|final|import|export|class|extends|static|enum|type|vim9script|abort)\b/,
+      keyword: /\b(if|else|elseif|endif|while|endwhile|for|endfor|def|enddef|function|endfunction|return|const|var|final|import|export|class|extends|static|enum|type|vim9script|abort|autocmd)\b/,
       # Identifiers can include # and special characters
       identifier: /\b[a-zA-Z_][a-zA-Z0-9_#]*\b/,
       # Single-character operators
@@ -25,6 +25,7 @@ module Vinter
       comma: /,/,
     }
 
+    CONTINUATION_OPERATORS = %w(. .. + - * / = == != > < >= <= && || ? : -> =>)
     def initialize(input)
       @input = input
       @tokens = []
