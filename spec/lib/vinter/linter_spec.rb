@@ -38,10 +38,8 @@ RSpec.describe Vinter::Linter do
 
     it 'reports no issues for well-formed code' do
       input = "vim9script\n\nvar count: number = 0\n\ndef Add(x: number, y: number): number\n  return x + y\nenddef"
-      #input = "vim9script\n\nvar count = 0\n\ndef Add(x, y): number\n  return x + y\nenddef"
       linter = described_class.new
       issues = linter.lint(input)
-      puts "Issues found: #{issues.inspect}"
 
       expect(issues.size).to eq(0)
     end

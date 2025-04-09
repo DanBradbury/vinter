@@ -8,7 +8,6 @@ RSpec.describe 'Integration Tests' do
     content = File.read(file_path)
     issues = linter.lint(content).select { |f| f[:type] == :error }
 
-    puts issues.inspect
     expect(issues.size).to eq(0)
   end
 

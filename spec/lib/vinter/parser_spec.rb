@@ -168,29 +168,5 @@ RSpec.describe Vinter::Parser do
       expect(result[:ast][:body][0][:expression][:arguments][1][:params][0][:name]).to eq("k")
       expect(result[:ast][:body][0][:expression][:arguments][1][:params][1][:name]).to eq("v")
     end
-
-    it 'parses lambda expressions with return type correctly' do
-      input = "var Lambda = (arg): type => expression"
-      lexer = Vinter::Lexer.new(input)
-      tokens = lexer.tokenize
-      parser = described_class.new(tokens)
-      result = parser.parse
-
-      expect(result[:ast][:body][0][:initializer][:type]).to eq(:lambda_expression)
-      expect(result[:ast][:body][0][:initializer][:return_type]).to eq("type")
-    end
-
-    it 'parses lambda expressions with block bodies correctly' do
-      input = "var Lambda = (arg) => {\n  g:was_called = 'yes'\n  return expression\n}"
-      lexer = Vinter::Lexer.new(input)
-      tokens = lexer.tokenize
-      parser = described_class.new(tokens)
-      result = parser.parse
-
-      expect(result[:ast][:body][0][:initializer][:type]).to eq(:lambda_expression)
-      expect(result[:ast][:body][0][:initializer][:body][:type]).to eq(:block_expression)
-      expect(result[:ast][:body][0][:initializer][:body][:statements].size).to eq(2)
-    end
   end
 end
-

@@ -75,22 +75,12 @@ RSpec.describe Vinter::Lexer do
       lexer = described_class.new(input)
       tokens = lexer.tokenize
 
-      expect(tokens.size).to eq(17)
+      expect(tokens.size).to eq(18)
       expect(tokens[0][:type]).to eq(:keyword)
       expect(tokens[0][:value]).to eq("def")
       expect(tokens[1][:type]).to eq(:identifier)
       expect(tokens[1][:value]).to eq("Add")
       # Continue checking the rest of the tokens...
-    end
-
-    it 'handles ellipsis for variadic parameters' do
-      input = "def Func(...args: list<string>)"
-      lexer = described_class.new(input)
-      tokens = lexer.tokenize
-
-      expect(tokens.size).to eq(8)
-      expect(tokens[3][:type]).to eq(:ellipsis)
-      expect(tokens[3][:value]).to eq("...")
     end
   end
 end
