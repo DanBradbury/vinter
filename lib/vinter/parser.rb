@@ -95,6 +95,12 @@ module Vinter
           { type: :vim9script_declaration, line: token[:line], column: token[:column] }
         when 'autocmd'
           parse_autocmd_statement
+        when 'execute'
+          parse_execute_statement
+        when 'let'
+          parse_let_statement  
+        when 'echohl', 'echomsg'
+          parse_echo_statement
         else
           @warnings << {
             message: "Unexpected keyword: #{current_token[:value]}",
@@ -123,6 +129,82 @@ module Vinter
         advance
         nil
       end
+    end
+
+    def parse_execute_statement
+      token = advance # Skip 'execute'
+      line = token[:line]
+      column = token[:column]
+
+      # Parse arguments - typically string expressions with concatenation
+      # Just accept any tokens until we hit a statement terminator or another command
+      expressions = []
+      expr = parse_expression
+      expressions << expr if expr
+
+      # Return the execute statement
+      {
+        type: :execute_statement,
+        expressions: expressions,
+        line: line,
+        column: column
+      }
+    end
+
+    def parse_let_statement
+      token = advance # Skip 'let'
+      line = token[:line]
+      column = token[:column]
+
+      # Parse the target variable
+      target = nil
+      if current_token
+        case current_token[:type]
+        when :identifier, :global_variable, :script_local, :arg_variable, :option_variable, :special_variable
+          target = {
+            type: current_token[:type],
+            name: current_token[:value],
+            line: current_token[:line],
+            column: current_token[:column]
+          }
+          advance
+        else
+          @errors << {
+            message: "Expected variable name after let",
+            position: @position,
+            line: current_token ? current_token[:line] : 0,
+            column: current_token ? current_token[:column] : 0
+          }
+        end
+      end
+
+      # Skip the '=' or other assignment operator
+      operator = nil
+      if current_token && (
+          (current_token[:type] == :operator && current_token[:value] == '=') ||
+          current_token[:type] == :compound_operator)
+        operator = current_token[:value]
+        advance
+      else
+        @errors << {
+          message: "Expected assignment operator after variable in let statement",
+          position: @position,
+          line: current_token ? current_token[:line] : 0,
+          column: current_token ? current_token[:column] : 0
+        }
+      end
+
+      # Parse the value expression
+      value = parse_expression
+
+      {
+        type: :let_statement,
+        target: target,
+        operator: operator,
+        value: value,
+        line: line,
+        column: column
+      }
     end
 
     def parse_autocmd_statement
@@ -794,7 +876,26 @@ module Vinter
           line: line,
           column: column
         }
-      when :identifier
+      when :option_variable
+        # Handle Vim option variables (like &compatible)
+        advance
+        expr = {
+          type: :option_variable,
+          name: token[:value],
+          line: line,
+          column: column
+        }
+      when :special_variable
+        # Handle Vim special variables (like v:version)
+        advance
+        expr = {
+          type: :special_variable,
+          name: token[:value],
+          line: line,
+          column: column
+        }
+      when :script_local
+        # Handle script-local variables/functions (like s:var)
         advance
 
         # Check if this is a function call
@@ -803,11 +904,55 @@ module Vinter
         end
 
         expr = {
-          type: :identifier,
+          type: :script_local,
           name: token[:value],
           line: line,
           column: column
         }
+      when :global_variable
+        # Handle global variables (like g:var)
+        advance
+        expr = {
+          type: :global_variable,
+          name: token[:value],
+          line: line,
+          column: column
+        }
+      when :arg_variable
+        # Handle function argument variables (like a:var)
+        advance
+        expr = {
+          type: :arg_variable,
+          name: token[:value],
+          line: line,
+          column: column
+        }
+      when :identifier
+        advance
+
+        # Check if this is a function call
+        if current_token && current_token[:type] == :paren_open
+          return parse_function_call(token[:value], line, column)
+        end
+        
+        # Special handling for execute command
+        if token[:value] == 'execute'
+          # Parse the string expressions for execute
+          # For now we'll just treat it as a normal identifier
+          expr = {
+            type: :identifier,
+            name: token[:value],
+            line: line,
+            column: column
+          }
+        else
+          expr = {
+            type: :identifier,
+            name: token[:value],
+            line: line,
+            column: column
+          }
+        end
       when :paren_open
         if is_lambda_expression
           return parse_lambda_expression(line, column)
@@ -820,6 +965,10 @@ module Vinter
         expr = parse_list_literal(line, column)
       when :brace_open
         expr = parse_dict_literal(line, column)
+      when :backslash
+        # Handle line continuation with backslash
+        advance
+        expr = parse_expression
       else
         @errors << {
           message: "Unexpected token in expression: #{token[:type]}",
@@ -1499,7 +1648,37 @@ module Vinter
         advance # Skip '!'
       end
 
-      name = expect(:identifier)
+      # For script-local functions or other scoped functions
+      is_script_local = false
+      function_scope = nil
+      
+      # Check if we have a script-local function (s:)
+      if current_token && current_token[:type] == :script_local
+        is_script_local = true
+        function_scope = current_token[:value]
+        advance # Skip s: prefix
+      elsif current_token && current_token[:type] == :identifier && current_token[:value].include?(':')
+        # Handle other scoped functions like g: or b:
+        parts = current_token[:value].split(':')
+        if parts.length == 2
+          function_scope = parts[0] + ':'
+          advance
+        end
+      end
+      
+      # Now handle the function name, which might be separate from the scope
+      name = nil
+      if !is_script_local && function_scope.nil? && current_token && current_token[:type] == :identifier
+        name = current_token
+        advance
+      elsif is_script_local || !function_scope.nil?
+        if current_token && current_token[:type] == :identifier
+          name = current_token
+          advance
+        end
+      else
+        name = expect(:identifier)
+      end
 
       # Parse parameter list
       expect(:paren_open)
@@ -1508,8 +1687,11 @@ module Vinter
 
       # Check for optional attributes (range, dict, abort, closure)
       attributes = []
-      while current_token && current_token[:type] == :identifier
-        if ['range', 'dict', 'abort', 'closure'].include?(current_token[:value])
+      while current_token
+        if current_token[:type] == :keyword && current_token[:value] == 'abort'
+          attributes << advance[:value]
+        elsif current_token[:type] == :identifier && 
+              ['range', 'dict', 'closure'].include?(current_token[:value])
           attributes << advance[:value]
         else
           break
@@ -1540,9 +1722,16 @@ module Vinter
         }
       end
 
+      function_name = name ? name[:value] : nil
+      if function_scope
+        function_name = function_scope + function_name if function_name
+      end
+      
       {
         type: :legacy_function,
-        name: name ? name[:value] : nil,
+        name: function_name,
+        is_script_local: is_script_local,
+        scope: function_scope,
         params: params,
         has_bang: has_bang,
         attributes: attributes,
@@ -1552,7 +1741,7 @@ module Vinter
       }
     end
 
-    # Legacy function parameters are different - they use a:name syntax
+    # Legacy function parameters are different - they can use a:name syntax
     def parse_parameter_list_legacy
       params = []
 
@@ -1569,7 +1758,28 @@ module Vinter
           break
         end
 
-        if !current_token || current_token[:type] != :identifier
+        if current_token && current_token[:type] == :identifier
+          # Regular parameter
+          param_name = advance
+          params << {
+            type: :parameter,
+            name: param_name[:value],
+            line: param_name[:line],
+            column: param_name[:column]
+          }
+        elsif current_token && current_token[:type] == :arg_variable
+          # Parameter with a: prefix
+          param_name = advance
+          # Extract name without 'a:' prefix
+          name_without_prefix = param_name[:value].sub(/^a:/, '')
+          params << {
+            type: :parameter,
+            name: name_without_prefix,
+            line: param_name[:line],
+            column: param_name[:column],
+            is_arg_prefixed: true
+          }
+        else
           @errors << {
             message: "Expected parameter name",
             position: @position,
@@ -1578,15 +1788,6 @@ module Vinter
           }
           break
         end
-
-        param_name = advance
-
-        params << {
-          type: :parameter,
-          name: param_name[:value],
-          line: param_name[:line],
-          column: param_name[:column]
-        }
 
         if current_token && current_token[:type] == :comma
           advance

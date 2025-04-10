@@ -2,7 +2,7 @@ module Vinter
   class Lexer
     TOKEN_TYPES = {
       # Vim9 specific keywords
-      keyword: /\b(if|else|elseif|endif|while|endwhile|for|endfor|def|enddef|function|endfunction|return|const|var|final|import|export|class|extends|static|enum|type|vim9script|abort|autocmd)\b/,
+      keyword: /\b(if|else|elseif|endif|while|endwhile|for|endfor|def|enddef|function|endfunction|return|const|var|final|import|export|class|extends|static|enum|type|vim9script|abort|autocmd|echohl|echomsg|let|execute)\b/,
       # Identifiers can include # and special characters
       identifier: /\b[a-zA-Z_][a-zA-Z0-9_#]*\b/,
       # Single-character operators
@@ -23,6 +23,7 @@ module Vinter
       colon: /:/,
       semicolon: /;/,
       comma: /,/,
+      backslash: /\\/,
     }
 
     CONTINUATION_OPERATORS = %w(. .. + - * / = == != > < >= <= && || ? : -> =>)
@@ -37,6 +38,72 @@ module Vinter
     def tokenize
       until @position >= @input.length
         chunk = @input[@position..-1]
+        
+        # Handle Vim option variables with & prefix
+        if match = chunk.match(/\A&[a-zA-Z_][a-zA-Z0-9_]*/)
+          @tokens << {
+            type: :option_variable,
+            value: match[0],
+            line: @line_num,
+            column: @column
+          }
+          @column += match[0].length
+          @position += match[0].length
+          next
+        end
+        
+        # Handle Vim special variables with v: prefix
+        if match = chunk.match(/\Av:[a-zA-Z_][a-zA-Z0-9_]*/)
+          @tokens << {
+            type: :special_variable,
+            value: match[0],
+            line: @line_num,
+            column: @column
+          }
+          @column += match[0].length
+          @position += match[0].length
+          next
+        end
+        
+        # Handle script-local identifiers with s: prefix
+        if match = chunk.match(/\As:[a-zA-Z_][a-zA-Z0-9_]*/)
+          @tokens << {
+            type: :script_local,
+            value: match[0],
+            line: @line_num,
+            column: @column
+          }
+          @column += match[0].length
+          @position += match[0].length
+          next
+        end
+        
+        # Handle global variables with g: prefix
+        if match = chunk.match(/\Ag:[a-zA-Z_][a-zA-Z0-9_]*/)
+          @tokens << {
+            type: :global_variable,
+            value: match[0],
+            line: @line_num,
+            column: @column
+          }
+          @column += match[0].length
+          @position += match[0].length
+          next
+        end
+        
+        # Handle argument variables with a: prefix
+        if match = chunk.match(/\Aa:[a-zA-Z_][a-zA-Z0-9_]*/)
+          @tokens << {
+            type: :arg_variable,
+            value: match[0],
+            line: @line_num,
+            column: @column
+          }
+          @column += match[0].length
+          @position += match[0].length
+          next
+        end
+        
         # Handle compound assignment operators
         if match = chunk.match(/\A(\+=|-=|\*=|\/=|\.\.=)/)
           @tokens << {
@@ -51,7 +118,7 @@ module Vinter
         end
 
         # Handle multi-character operators explicitly
-        if match = chunk.match(/\A(==|!=|=>|->|\.\.)/)
+        if match = chunk.match(/\A(==|!=|=>|->|\.\.|\|\||&&)/)
           @tokens << {
             type: :operator,
             value: match[0],
@@ -88,6 +155,19 @@ module Vinter
             end
           end
           @position += whitespace.length
+          next
+        end
+
+        # Handle backslash for line continuation
+        if chunk.start_with?('\\')
+          @tokens << {
+            type: :backslash,
+            value: '\\',
+            line: @line_num,
+            column: @column
+          }
+          @column += 1
+          @position += 1
           next
         end
 
