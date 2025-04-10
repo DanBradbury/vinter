@@ -1,7 +1,7 @@
 Gem::Specification.new do |s|
   s.name        = "vinter"
-  s.version     = "0.2.0"
-  s.summary     = "A linter for Vim9 script"
+  s.version     = "0.3.0"
+  s.summary     = "A linter for leagacy + Vim9 script"
   s.description = "A linter for the Vim9 script language, helping to identify issues and enforce best practices"
   s.authors     = ["Dan Bradbury"]
   s.email       = "dan.luckydaisy@gmail.com"
