@@ -920,9 +920,35 @@ module Vinter
           advance
         end
 
-        # Now we should be at the operator
+        
         if current_token && current_token[:type] == :operator &&
-           operator_precedence(current_token[:value]) >= precedence
+          ['<', '>', '=', '!'].include?(current_token[:value]) &&
+          peek_token && peek_token[:type] == :operator && peek_token[:value] == '='
+         
+          # Combine the two operators into one token
+          op_token = current_token
+          op = current_token[:value] + peek_token[:value]
+          advance # Skip the first operator
+          advance # Skip the second operator
+
+          # Now process the combined operator
+          op_precedence = operator_precedence(op)
+
+          if op_precedence >= precedence
+            right = parse_binary_expression(op_precedence + 1)
+            
+            left = {
+              type: :binary_expression,
+              operator: op,
+              left: left,
+              right: right,
+              line: op_token[:line],
+              column: op_token[:column]
+            }
+          end
+        # Now we should be at the operator
+        elsif current_token && current_token[:type] == :operator &&
+          operator_precedence(current_token[:value]) >= precedence
           op_token = advance
           op = op_token[:value]
           op_precedence = operator_precedence(op)

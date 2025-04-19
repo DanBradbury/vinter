@@ -113,13 +113,30 @@ RSpec.describe Vinter::Parser do
       tokens = lexer.tokenize
       parser = described_class.new(tokens)
       result = parser.parse
-      puts result[:ast].inspect
+      # puts result[:ast].inspect
 
       expect(result[:ast][:type]).to eq(:program)
       expect(result[:ast][:body].size).to eq(1)
       expect(result[:ast][:body][0][:type]).to eq(:let_statement)
       expect(result[:ast][:body][0][:target][:type]).to eq(:local_variable)
       expect(result[:ast][:body][0][:target][:name]).to eq("l:foo")
+    end
+
+    it "parses while loops correctly" do
+      input = """
+      while l:line <= len(l:changelog)
+          let l:line += 1
+      endwhile
+      """
+      lexer = Vinter::Lexer.new(input)
+      tokens = lexer.tokenize
+      parser = described_class.new(tokens)
+      result = parser.parse
+      puts result[:ast].inspect
+
+      expect(result[:ast][:type]).to eq(:program)
+      expect(result[:ast][:body].size).to eq(1)
+      expect(result[:ast][:body][0][:type]).to eq(:while_statement)
     end
 
     it 'parses vim9script declaration' do
