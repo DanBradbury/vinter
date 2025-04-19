@@ -1,0 +1,5 @@
+grammar Viml
+  rule hello
+    'hello daniel'
+  end
+end
