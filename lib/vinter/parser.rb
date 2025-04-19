@@ -233,7 +233,7 @@ module Vinter
       target = nil
       if current_token
         case current_token[:type]
-        when :identifier, :global_variable, :script_local, :arg_variable, :option_variable, :special_variable
+        when :identifier, :global_variable, :script_local, :arg_variable, :option_variable, :special_variable, :local_variable
           target = {
             type: current_token[:type],
             name: current_token[:value],
@@ -1082,6 +1082,15 @@ module Vinter
         advance
         expr = {
           type: :arg_variable,
+          name: token[:value],
+          line: line,
+          column: column
+        }
+      when :local_variable
+        # Handle local variables (like l:var)
+        advance
+        expr = {
+          type: :local_variable,
           name: token[:value],
           line: line,
           column: column

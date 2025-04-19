@@ -139,6 +139,19 @@ module Vinter
           next
         end
 
+        # Handle argument variables with a: prefix
+        if match = chunk.match(/\Al:[a-zA-Z_][a-zA-Z0-9_]*/)
+          @tokens << {
+            type: :local_variable,
+            value: match[0],
+            line: @line_num,
+            column: @column
+          }
+          @column += match[0].length
+          @position += match[0].length
+          next
+        end
+
         # Add support for standalone namespace prefixes (like g:)
         if match = chunk.match(/\A([sgbwtal]):/)
           @tokens << {

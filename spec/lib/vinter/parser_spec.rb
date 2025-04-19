@@ -100,13 +100,27 @@ RSpec.describe Vinter::Parser do
       tokens = lexer.tokenize
       parser = described_class.new(tokens)
       result = parser.parse
-      puts result[:ast].inspect
+      # puts result[:ast].inspect
 
       expect(result[:ast][:type]).to eq(:program)
       expect(result[:ast][:body].size).to eq(1)
       expect(result[:ast][:body][0][:type]).to eq(:if_statement)
     end
 
+    it "parses lets with l: variables" do
+      input = "let l:foo = 1"
+      lexer = Vinter::Lexer.new(input)
+      tokens = lexer.tokenize
+      parser = described_class.new(tokens)
+      result = parser.parse
+      puts result[:ast].inspect
+
+      expect(result[:ast][:type]).to eq(:program)
+      expect(result[:ast][:body].size).to eq(1)
+      expect(result[:ast][:body][0][:type]).to eq(:let_statement)
+      expect(result[:ast][:body][0][:target][:type]).to eq(:local_variable)
+      expect(result[:ast][:body][0][:target][:name]).to eq("l:foo")
+    end
 
     it 'parses vim9script declaration' do
       input = "vim9script"
