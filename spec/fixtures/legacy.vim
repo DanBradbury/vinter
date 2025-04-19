@@ -114,3 +114,17 @@ function! NERDTreeAddMenuSeparator(...)
     call g:NERDTreeMenuItem.CreateSeparator(opts)
 endfunction
 
+function! NERDTreeFocus()
+    if g:NERDTree.IsOpen()
+        call g:NERDTree.CursorToTreeWin(0)
+    else
+        call g:NERDTreeCreator.ToggleTabTree('')
+    endif
+endfunction
+
+function! NERDTreeCWD()
+    if empty(getcwd())
+        call nerdtree#echoWarning('current directory does not exist')
+        return
+    endif
+endfunction

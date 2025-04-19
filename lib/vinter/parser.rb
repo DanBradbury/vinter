@@ -837,7 +837,12 @@ module Vinter
       column = token[:column]
 
       value = nil
-      if @position < @tokens.length && current_token[:type] != :semicolon
+      # Check if we've reached the end of the file, end of line, or a semicolon
+      if @position < @tokens.length && 
+         current_token && 
+         current_token[:type] != :semicolon &&
+         !(current_token[:type] == :keyword && 
+           ['endif', 'endwhile', 'endfor', 'endfunction', 'endfunc'].include?(current_token[:value]))
         value = parse_expression
       end
 
@@ -893,6 +898,12 @@ module Vinter
     end
 
     def parse_expression
+      # Special case for empty return statements or standalone keywords that shouldn't be expressions
+      if current_token && current_token[:type] == :keyword && 
+         ['return', 'endif', 'endwhile', 'endfor', 'endfunction', 'endfunc'].include?(current_token[:value])
+        return nil
+      end
+      
       return parse_binary_expression
     end
 
@@ -968,6 +979,34 @@ module Vinter
       expr = nil
 
       case token[:type]
+      # Add special handling for keywords that might appear in expressions
+      when :keyword
+        # Legacy Vim allows certain keywords as identifiers in expressions
+        if ['return'].include?(token[:value])
+          # Handle 'return' keyword specially when it appears in an expression context
+          advance
+          @warnings << {
+            message: "Keyword '#{token[:value]}' used in an expression context",
+            position: @position,
+            line: line,
+            column: column
+          }
+          expr = {
+            type: :identifier,
+            name: token[:value],
+            line: line,
+            column: column
+          }
+        else
+          @errors << {
+            message: "Unexpected keyword in expression: #{token[:value]}",
+            position: @position,
+            line: line,
+            column: column
+          }
+          advance
+          return nil
+        end
       when :number
         advance
         expr = {

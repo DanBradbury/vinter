@@ -67,6 +67,47 @@ RSpec.describe Vinter::Parser do
       expect(arguments.map{ |f| f[:type]}).to eq([:namespace_prefix, :literal, :literal])
     end
 
+    it "parses nested conditions" do
+      input = <<-VIM
+        function! NERDTreeCWD()
+            if empty(getcwd())
+                call nerdtree#echoWarning('current directory does not exist')
+                return
+            endif
+        endfunction
+      VIM
+
+      lexer = Vinter::Lexer.new(input)
+      tokens = lexer.tokenize
+      parser = described_class.new(tokens)
+      result = parser.parse
+      # puts result[:ast].inspect
+
+      expect(result[:ast][:type]).to eq(:program)
+      expect(result[:ast][:body].size).to eq(1)
+      expect(result[:ast][:body][0][:type]).to eq(:legacy_function)
+    end
+
+    it "parses basic conditional" do
+      input = <<-VIM
+          if empty(getcwd())
+              call nerdtree#echoWarning('current directory does not exist')
+              return
+          endif
+      VIM
+
+      lexer = Vinter::Lexer.new(input)
+      tokens = lexer.tokenize
+      parser = described_class.new(tokens)
+      result = parser.parse
+      puts result[:ast].inspect
+
+      expect(result[:ast][:type]).to eq(:program)
+      expect(result[:ast][:body].size).to eq(1)
+      expect(result[:ast][:body][0][:type]).to eq(:if_statement)
+    end
+
+
     it 'parses vim9script declaration' do
       input = "vim9script"
       lexer = Vinter::Lexer.new(input)
