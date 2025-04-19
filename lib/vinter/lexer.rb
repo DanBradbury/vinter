@@ -2,7 +2,7 @@ module Vinter
   class Lexer
     TOKEN_TYPES = {
       # Vim9 specific keywords
-      keyword: /\b(if|else|elseif|endif|while|endwhile|for|endfor|def|enddef|function|endfunction|return|const|var|final|import|export|class|extends|static|enum|type|vim9script|abort|autocmd|echohl|echomsg|let|execute)\b/,
+      keyword: /\b(if|else|elseif|endif|while|endwhile|for|endfor|def|enddef|function|endfunction|return|const|var|final|import|export|class|extends|static|enum|type|vim9script|abort|autocmd|echoerr|echohl|echomsg|let|execute)\b/,
       # Identifiers can include # and special characters
       identifier: /\b[a-zA-Z_][a-zA-Z0-9_#]*\b/,
       # Single-character operators
@@ -12,7 +12,7 @@ module Vinter
       # Handle both single and double quoted strings
       string: /"([^"\\]|\\.)*"|'([^'\\]|\\.)*'/,
       # Vim9 comments use #
-      comment: /#.*/,
+      comment: /(#|").*/,
       whitespace: /\s+/,
       brace_open: /\{/,
       brace_close: /\}/,
@@ -26,7 +26,7 @@ module Vinter
       backslash: /\\/,
     }
 
-    CONTINUATION_OPERATORS = %w(. .. + - * / = == != > < >= <= && || ? : -> =>)
+    CONTINUATION_OPERATORS = %w(. .. + - * / = == ==# ==? != > < >= <= && || ? : -> =>)
     def initialize(input)
       @input = input
       @tokens = []
@@ -38,7 +38,29 @@ module Vinter
     def tokenize
       until @position >= @input.length
         chunk = @input[@position..-1]
+
+        # First check if the line starts with a quote (comment in Vim)
+        current_line_start = @input.rindex("\n", @position) || 0
+        current_line_start += 1 if @input[current_line_start] == "\n"
         
+        # If we're at the start of a line and it begins with a quote
+        if @position == current_line_start && chunk.start_with?('"')
+          # Find the end of the line
+          line_end = chunk.index("\n") || chunk.length
+          comment_text = chunk[0...line_end]
+          
+          @tokens << {
+            type: :comment,
+            value: comment_text,
+            line: @line_num,
+            column: @column
+          }
+          
+          @position += comment_text.length
+          @column += comment_text.length
+          next
+        end
+
         # Handle Vim option variables with & prefix
         if match = chunk.match(/\A&[a-zA-Z_][a-zA-Z0-9_]*/)
           @tokens << {
@@ -103,7 +125,20 @@ module Vinter
           @position += match[0].length
           next
         end
-        
+
+        # Add support for standalone namespace prefixes (like g:)
+        if match = chunk.match(/\A([sgbwtal]):/)
+          @tokens << {
+            type: :namespace_prefix,
+            value: match[0],
+            line: @line_num,
+            column: @column
+          }
+          @column += match[0].length
+          @position += match[0].length
+          next
+        end
+
         # Handle compound assignment operators
         if match = chunk.match(/\A(\+=|-=|\*=|\/=|\.\.=)/)
           @tokens << {
@@ -118,7 +153,7 @@ module Vinter
         end
 
         # Handle multi-character operators explicitly
-        if match = chunk.match(/\A(==|!=|=>|->|\.\.|\|\||&&)/)
+        if match = chunk.match(/\A(==#|==|!=|=>|->|\.\.|\|\||&&)/)
           @tokens << {
             type: :operator,
             value: match[0],

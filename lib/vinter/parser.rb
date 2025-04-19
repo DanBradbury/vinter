@@ -99,7 +99,7 @@ module Vinter
           parse_execute_statement
         when 'let'
           parse_let_statement  
-        when 'echohl', 'echomsg'
+        when 'echohl', 'echomsg', 'echoerr'
           parse_echo_statement
         else
           @warnings << {
@@ -119,6 +119,13 @@ module Vinter
         end
       elsif current_token[:type] == :comment
         parse_comment
+      elsif current_token[:type] == :string && current_token[:value].start_with?('"')
+        token = current_token
+        line = token[:line]
+        column = token[:column]
+        value = token[:value]
+        advance
+        { type: :comment, value: value, line: line, column: column }
       else
         @warnings << {
           message: "Unexpected token type: #{current_token[:type]}",
@@ -305,6 +312,7 @@ module Vinter
       token = advance # Skip 'if'
       line = token[:line]
       column = token[:column]
+
       condition = parse_expression
 
       then_branch = []
@@ -336,13 +344,30 @@ module Vinter
             else_branch << stmt if stmt
           end
         elsif current_token[:value] == 'elseif'
-          # This is a simplified handling - elseif should be treated as a nested if
-          else_branch << parse_if_statement
+          elseif_stmt = parse_if_statement
+          else_branch << elseif_stmt if elseif_stmt
+
+          return {
+            type: :if_statement,
+            condition: condition,
+            then_branch: then_branch,
+            else_branch: else_branch,
+            line: line,
+            column: column
+          }
         end
       end
-
       # Expect endif
-      expect(:keyword) # This should be 'endif'
+      if current_token && current_token[:type] == :keyword && current_token[:value] == 'endif'
+        advance # Skip 'endif'
+      else
+        @errors << {
+          message: "Expected 'endif' to close if statement",
+          position: @position,
+          line: current_token ? current_token[:line] : 0,
+          column: current_token ? current_token[:column] : 0
+        }
+      end
 
       {
         type: :if_statement,
@@ -868,14 +893,24 @@ module Vinter
           column: column
         }
       when :string
-        advance
-        expr = {
-          type: :literal,
-          value: token[:value],
-          token_type: :string,
-          line: line,
-          column: column
-        }
+        if token[:value].start_with?('"')
+          advance
+          return {
+            type: :comment,
+            value: token[:value],
+            line: line,
+            column: column
+          }
+        else
+          advance
+          expr = {
+            type: :literal,
+            value: token[:value],
+            token_type: :string,
+            line: line,
+            column: column
+          }
+        end
       when :option_variable
         # Handle Vim option variables (like &compatible)
         advance
@@ -928,6 +963,11 @@ module Vinter
           column: column
         }
       when :identifier
+        # Special handling for Vim built-in functions
+        if token[:value] == 'has' || token[:value] == 'exists' || token[:value] == 'empty'
+          return parse_builtin_function_call(token[:value], line, column)
+        end
+
         advance
 
         # Check if this is a function call
@@ -953,6 +993,14 @@ module Vinter
             column: column
           }
         end
+      when :namespace_prefix
+        advance
+        expr = {
+          type: :namespace_prefix,
+          name: token[:value],
+          line: line,
+          column: column
+        }
       when :paren_open
         if is_lambda_expression
           return parse_lambda_expression(line, column)
@@ -1104,6 +1152,74 @@ module Vinter
       end
 
       return expr
+    end
+
+    def parse_builtin_function_call(name, line, column)
+      # Skip the function name (already consumed)
+      advance if current_token[:value] == name
+      
+      # Expect opening parenthesis
+      if current_token && current_token[:type] == :paren_open
+        advance # Skip '('
+      else
+        @errors << {
+          message: "Expected '(' after #{name} function",
+          position: @position,
+          line: current_token ? current_token[:line] : 0,
+          column: current_token ? current_token[:column] : 0
+        }
+        return nil
+      end
+    
+      # Parse arguments
+      args = []
+      
+      # Parse until we find closing parenthesis
+      while @position < @tokens.length && current_token && current_token[:type] != :paren_close
+        # Skip any whitespace or comments
+        if current_token[:type] == :whitespace || current_token[:type] == :comment
+          advance
+          next
+        end
+        
+        # Parse the argument
+        arg = parse_expression
+        args << arg if arg
+        
+        # If we have a comma, advance past it and continue
+        if current_token && current_token[:type] == :comma
+          advance
+        elsif current_token && current_token[:type] != :paren_close
+          @errors << {
+            message: "Expected comma or closing parenthesis in #{name} function",
+            position: @position,
+            line: current_token[:line],
+            column: current_token[:column]
+          }
+          break
+        end
+      end
+      
+      # Expect closing parenthesis
+      if current_token && current_token[:type] == :paren_close
+        advance # Skip ')'
+      else
+        @errors << {
+          message: "Expected ')' to close #{name} function call",
+          position: @position,
+          line: current_token ? current_token[:line] : 0,
+          column: current_token ? current_token[:column] : 0
+        }
+      end
+      
+      # Return the function call node
+      {
+        type: :builtin_function_call,
+        name: name,
+        arguments: args,
+        line: line,
+        column: column
+      }
     end
 
     def is_lambda_expression

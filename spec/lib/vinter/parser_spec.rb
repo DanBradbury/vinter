@@ -2,6 +2,71 @@ require 'spec_helper'
 
 RSpec.describe Vinter::Parser do
   describe '#parse' do
+    it "parses a simple let" do
+      input = "let g:thing = 10"
+      lexer = Vinter::Lexer.new(input)
+      tokens = lexer.tokenize
+      parser = described_class.new(tokens)
+      result = parser.parse
+
+      expect(result[:ast][:type]).to eq(:program)
+      expect(result[:ast][:body].size).to eq(1)
+      expect(result[:ast][:body][0][:type]).to eq(:let_statement)
+    end
+
+    it "handles complicated stuff" do
+      input = 'echoerr "NERDTree: this plugin requires vim >= 7.3. DOWNLOAD IT! "'
+      lexer = Vinter::Lexer.new(input)
+      tokens = lexer.tokenize
+      parser = described_class.new(tokens)
+      result = parser.parse
+
+      expect(result[:ast][:type]).to eq(:program)
+      expect(result[:ast][:body].size).to eq(1)
+      expect(result[:ast][:body][0][:type]).to eq(:echo_statement)
+    end
+
+    it "more complicated stuff" do
+      input = 'echo "testing"'
+      lexer = Vinter::Lexer.new(input)
+      tokens = lexer.tokenize
+      parser = described_class.new(tokens)
+      result = parser.parse
+
+      expect(result[:ast][:type]).to eq(:program)
+      expect(result[:ast][:body].size).to eq(1)
+      expect(result[:ast][:body][0][:type]).to eq(:echo_statement)
+    end
+
+    it "handles legacy comments" do
+      input = '"for line continuation - i.e dont want C in &cpoptions"'
+      lexer = Vinter::Lexer.new(input)
+      tokens = lexer.tokenize
+      parser = described_class.new(tokens)
+      result = parser.parse
+
+      expect(result[:ast][:type]).to eq(:program)
+      expect(result[:ast][:body].size).to eq(1)
+      expect(result[:ast][:body][0][:type]).to eq(:comment)
+    end
+
+    it "parses setting globals with get" do
+      input = "let g:NERDTreeAutoCenter            = get(g:, 'NERDTreeAutoCenter',            1)"
+      lexer = Vinter::Lexer.new(input)
+      tokens = lexer.tokenize
+      parser = described_class.new(tokens)
+      result = parser.parse
+      # puts result.inspect
+
+      expect(result[:ast][:type]).to eq(:program)
+      expect(result[:ast][:body].size).to eq(1)
+      expect(result[:ast][:body][0][:type]).to eq(:let_statement)
+      expect(result[:ast][:body][0][:value][:type]).to eq(:function_call)
+      arguments = result[:ast][:body][0][:value][:arguments]
+      expect(arguments.count).to eq(3)
+      expect(arguments.map{ |f| f[:type]}).to eq([:namespace_prefix, :literal, :literal])
+    end
+
     it 'parses vim9script declaration' do
       input = "vim9script"
       lexer = Vinter::Lexer.new(input)
