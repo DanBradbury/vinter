@@ -101,6 +101,8 @@ module Vinter
           parse_let_statement  
         when 'echohl', 'echomsg', 'echoerr'
           parse_echo_statement
+        when 'augroup'
+          parse_augroup_statement
         else
           @warnings << {
             message: "Unexpected keyword: #{current_token[:value]}",
@@ -114,6 +116,10 @@ module Vinter
       elsif current_token[:type] == :identifier
         if current_token[:value] == "echo"
           parse_echo_statement
+        elsif current_token[:value] == "augroup"
+          parse_augroup_statement
+        elsif current_token[:value] == "au" || current_token[:value] == "autocmd"
+          parse_autocmd_statement
         else
           parse_expression_statement
         end
@@ -136,6 +142,66 @@ module Vinter
         advance
         nil
       end
+    end
+
+    def parse_augroup_statement
+      token = advance # Skip 'augroup'
+      line = token[:line]
+      column = token[:column]
+      
+      # Get the augroup name
+      name = nil
+      if current_token && current_token[:type] == :identifier
+        name = current_token[:value]
+        advance
+      else
+        @errors << {
+          message: "Expected augroup name",
+          position: @position,
+          line: current_token ? current_token[:line] : 0,
+          column: current_token ? current_token[:column] : 0
+        }
+      end
+      
+      # Check for augroup END
+      is_end_marker = false
+      if name && (name.upcase == "END" || name == "END")
+        is_end_marker = true
+        return {
+          type: :augroup_end,
+          line: line,
+          column: column
+        }
+      end
+      
+      # Parse statements within the augroup until we find 'augroup END'
+      body = []
+      while @position < @tokens.length
+        # Check for 'augroup END'
+        if (current_token[:type] == :keyword && current_token[:value] == 'augroup') || 
+           (current_token[:type] == :identifier && current_token[:value] == 'augroup')
+          # Look ahead for END
+          if peek_token && 
+             ((peek_token[:type] == :identifier && 
+               (peek_token[:value].upcase == 'END' || peek_token[:value] == 'END')) ||
+              (peek_token[:type] == :keyword && peek_token[:value].upcase == 'END'))
+            advance # Skip 'augroup'
+            advance # Skip 'END'
+            break
+          end
+        end
+        
+        stmt = parse_statement
+        body << stmt if stmt
+      end
+      
+      {
+        type: :augroup_statement,
+        name: name,
+        body: body,
+        line: line,
+        column: column
+      }
     end
 
     def parse_execute_statement
@@ -218,8 +284,8 @@ module Vinter
       token = advance # Skip 'autocmd'
       line = token[:line]
       column = token[:column]
-
-      # Parse event name (like BufNewFile)
+    
+      # Parse event name (like BufNewFile or VimEnter)
       event = nil
       if current_token && current_token[:type] == :identifier
         event = advance[:value]
@@ -231,55 +297,31 @@ module Vinter
           column: current_token ? current_token[:column] : 0
         }
       end
-
-      # Parse pattern (like *.match)
+    
+      # Parse pattern (like *.match or *)
       pattern = nil
       if current_token
         pattern = current_token[:value]
         advance
       end
-
-      # Parse command (can be complex, including if statements)
-      commands = []
-
-      # Handle pipe-separated commands
-      in_command = true
-      while in_command && @position < @tokens.length
-        if current_token && current_token[:value] == '|'
-          advance # Skip '|'
+    
+      # Parse everything after as the command - collect as raw tokens
+      command_parts = []
+      while @position < @tokens.length
+        if !current_token || current_token[:type] == :comment || 
+           (current_token[:value] == "\n" && !current_token[:value].start_with?("\\"))
+          break
         end
-
-        # Parse the command
-        if current_token && current_token[:type] == :keyword
-          case current_token[:value]
-          when 'if'
-            commands << parse_if_statement
-          when 'echo'
-            commands << parse_echo_statement
-          # Add other command types as needed
-          else
-            # Generic command handling
-            cmd = parse_expression_statement
-            commands << cmd if cmd
-          end
-        elsif current_token && current_token[:type] == :identifier
-          cmd = parse_expression_statement
-          commands << cmd if cmd
-        else
-          in_command = false
-        end
-
-        # Check if we've reached the end of the autocmd command
-        if !current_token || current_token[:type] == :comment || current_token[:value] == "\n"
-          in_command = false
-        end
+        
+        command_parts << current_token
+        advance
       end
-
+    
       return {
         type: :autocmd_statement,
         event: event,
         pattern: pattern,
-        commands: commands,
+        command_parts: command_parts,
         line: line,
         column: column
       }
@@ -312,41 +354,80 @@ module Vinter
       token = advance # Skip 'if'
       line = token[:line]
       column = token[:column]
-
+    
       condition = parse_expression
-
+    
       then_branch = []
       else_branch = []
-
+    
       # Parse statements until we hit 'else', 'elseif', or 'endif'
       while @position < @tokens.length
-        if current_token[:type] == :keyword &&
+        # Check for the tokens that would terminate this block
+        if current_token && current_token[:type] == :keyword &&
            ['else', 'elseif', 'endif'].include?(current_token[:value])
           break
         end
-
+    
+        # Before parsing a statement, save our position in case we need to backtrack
+        old_position = @position
+        old_errors_count = @errors.length
+        
         stmt = parse_statement
-        then_branch << stmt if stmt
+        
+        # If parsing the statement added errors, there might be a mismatch or confusion
+        # between Vim control structures. Check for specific issues.
+        if @errors.length > old_errors_count
+          last_error = @errors.last
+          
+          # If we expected 'endif' but didn't find it, we might be inside a nested control
+          # structure that was correctly closed but not recognized
+          if last_error[:message].include?("Expected 'endif'")
+            # Revert to before the statement and try to find the actual endif
+            @position = old_position
+            @errors.pop # Remove the error we're handling
+            
+            # Skip ahead to find an endif, else, or elseif
+            while @position < @tokens.length
+              if current_token[:type] == :keyword && 
+                 ['endif', 'else', 'elseif'].include?(current_token[:value])
+                break
+              end
+              advance
+            end
+            
+            # If we found one of our terminating keywords, break out
+            if current_token && current_token[:type] == :keyword &&
+               ['else', 'elseif', 'endif'].include?(current_token[:value])
+              break
+            end
+          else
+            # If it's a different kind of error, keep the statement and continue
+            then_branch << stmt if stmt
+          end
+        else
+          # No errors occurred, add the statement
+          then_branch << stmt if stmt
+        end
       end
-
+    
       # Check for else/elseif
       if current_token && current_token[:type] == :keyword
         if current_token[:value] == 'else'
           advance # Skip 'else'
-
+    
           # Parse statements until 'endif'
           while @position < @tokens.length
             if current_token[:type] == :keyword && current_token[:value] == 'endif'
               break
             end
-
+    
             stmt = parse_statement
             else_branch << stmt if stmt
           end
         elsif current_token[:value] == 'elseif'
           elseif_stmt = parse_if_statement
           else_branch << elseif_stmt if elseif_stmt
-
+    
           return {
             type: :if_statement,
             condition: condition,
@@ -357,18 +438,22 @@ module Vinter
           }
         end
       end
+      
       # Expect endif
       if current_token && current_token[:type] == :keyword && current_token[:value] == 'endif'
         advance # Skip 'endif'
       else
-        @errors << {
-          message: "Expected 'endif' to close if statement",
-          position: @position,
-          line: current_token ? current_token[:line] : 0,
-          column: current_token ? current_token[:column] : 0
-        }
+        # Don't add an error if we've already reached the end of the file
+        if @position < @tokens.length
+          @errors << {
+            message: "Expected 'endif' to close if statement",
+            position: @position,
+            line: current_token ? current_token[:line] : 0,
+            column: current_token ? current_token[:column] : 0
+          }
+        end
       end
-
+    
       {
         type: :if_statement,
         condition: condition,
@@ -1860,22 +1945,55 @@ module Vinter
     # Legacy function parameters are different - they can use a:name syntax
     def parse_parameter_list_legacy
       params = []
-
+      
       # Empty parameter list
       if current_token && current_token[:type] == :paren_close
         return params
       end
-
-      loop do
-        # Check for ... (varargs) in legacy function
-        if current_token && current_token[:type] == :ellipsis
-          advance
-          params << { type: :var_args_legacy, name: '...' }
-          break
+      
+      # Handle special case: varargs at the start of the parameter list
+      if current_token && (
+        (current_token[:type] == :ellipsis) || 
+        (current_token[:type] == :operator && current_token[:value] == '.')
+      )
+        if current_token[:type] == :ellipsis
+          token = advance
+          params << { 
+            type: :var_args_legacy, 
+            name: '...', 
+            line: token[:line], 
+            column: token[:column] 
+          }
+          return params
+        else 
+          # Count consecutive dots
+          dot_count = 0
+          first_dot_token = current_token
+          
+          # Store the line and column before we advance
+          dot_line = first_dot_token[:line]
+          dot_column = first_dot_token[:column]
+          
+          while current_token && current_token[:type] == :operator && current_token[:value] == '.'
+            dot_count += 1
+            advance
+          end
+          
+          if dot_count == 3
+            params << { 
+              type: :var_args_legacy, 
+              name: '...', 
+              line: dot_line, 
+              column: dot_column 
+            }
+            return params
+          end
         end
-
+      end
+      
+      # Regular parameter parsing (existing logic)
+      loop do
         if current_token && current_token[:type] == :identifier
-          # Regular parameter
           param_name = advance
           params << {
             type: :parameter,
@@ -1884,9 +2002,7 @@ module Vinter
             column: param_name[:column]
           }
         elsif current_token && current_token[:type] == :arg_variable
-          # Parameter with a: prefix
           param_name = advance
-          # Extract name without 'a:' prefix
           name_without_prefix = param_name[:value].sub(/^a:/, '')
           params << {
             type: :parameter,
@@ -1896,24 +2012,74 @@ module Vinter
             is_arg_prefixed: true
           }
         else
-          @errors << {
-            message: "Expected parameter name",
-            position: @position,
-            line: current_token ? current_token[:line] : 0,
-            column: current_token ? current_token[:column] : 0
-          }
-          break
-        end
-
+          # We might be at varargs after other parameters
+          if current_token && (
+            (current_token[:type] == :ellipsis) || 
+            (current_token[:type] == :operator && current_token[:value] == '.')
+          )
+            # Add debug
+            puts "Found potential varargs token: #{current_token[:type]} #{current_token[:value]}"
+            
+            if current_token[:type] == :ellipsis
+              token = current_token  # STORE the token before advancing
+              advance
+              params << { 
+                type: :var_args_legacy, 
+                name: '...', 
+                line: token[:line],   # Use stored token
+                column: token[:column] 
+              }
+            else
+              dot_count = 0
+              first_dot_token = current_token
+              
+              # Store line/column BEFORE advancing
+              dot_line = first_dot_token[:line]
+              dot_column = first_dot_token[:column]
+              
+              puts "Starting dot sequence at line #{dot_line}, column #{dot_column}"
+              
+              while current_token && current_token[:type] == :operator && current_token[:value] == '.'
+                dot_count += 1
+                puts "Found dot #{dot_count}"
+                advance
+              end
+              
+              if dot_count == 3
+                puts "Complete varargs found (3 dots)"
+                params << { 
+                  type: :var_args_legacy, 
+                  name: '...', 
+                  line: dot_line,     # Use stored values
+                  column: dot_column 
+                }
+              else
+                puts "Incomplete varargs: only #{dot_count} dots found"
+              end
+            end
+            break
+          else
+            # Add debug to see what unexpected token we're encountering
+            puts "Unexpected token in parameter list: #{current_token ? current_token[:type] : 'nil'} #{current_token ? current_token[:value] : ''}"
+            
+            # Not a valid parameter or varargs
+            @errors << {
+              message: "Expected parameter name",
+              position: @position,
+              line: current_token ? current_token[:line] : 0,
+              column: current_token ? current_token[:column] : 0
+            }
+            break
+          end
+        end        
         if current_token && current_token[:type] == :comma
           advance
         else
           break
         end
       end
-
+      
       params
     end
-
   end
 end

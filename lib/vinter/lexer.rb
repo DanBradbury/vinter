@@ -152,19 +152,6 @@ module Vinter
           next
         end
 
-        # Handle multi-character operators explicitly
-        if match = chunk.match(/\A(==#|==|!=|=>|->|\.\.|\|\||&&)/)
-          @tokens << {
-            type: :operator,
-            value: match[0],
-            line: @line_num,
-            column: @column
-          }
-          @column += match[0].length
-          @position += match[0].length
-          next
-        end
-
         # Handle ellipsis for variable args
         if chunk.start_with?('...')
           @tokens << {
@@ -175,6 +162,19 @@ module Vinter
           }
           @column += 3
           @position += 3
+          next
+        end
+
+        # Handle multi-character operators explicitly
+        if match = chunk.match(/\A(==#|==|!=|=>|->|\.\.|\|\||&&)/)
+          @tokens << {
+            type: :operator,
+            value: match[0],
+            line: @line_num,
+            column: @column
+          }
+          @column += match[0].length
+          @position += match[0].length
           next
         end
 
