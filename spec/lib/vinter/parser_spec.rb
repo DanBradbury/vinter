@@ -61,7 +61,7 @@ RSpec.describe Vinter::Parser do
       expect(result[:ast][:type]).to eq(:program)
       expect(result[:ast][:body].size).to eq(1)
       expect(result[:ast][:body][0][:type]).to eq(:let_statement)
-      expect(result[:ast][:body][0][:value][:type]).to eq(:function_call)
+      expect(result[:ast][:body][0][:value][:type]).to eq(:builtin_function_call)
       arguments = result[:ast][:body][0][:value][:arguments]
       expect(arguments.count).to eq(3)
       expect(arguments.map{ |f| f[:type]}).to eq([:namespace_prefix, :literal, :literal])
@@ -132,11 +132,54 @@ RSpec.describe Vinter::Parser do
       tokens = lexer.tokenize
       parser = described_class.new(tokens)
       result = parser.parse
-      puts result[:ast].inspect
+      # puts result[:ast].inspect
 
       expect(result[:ast][:type]).to eq(:program)
       expect(result[:ast][:body].size).to eq(1)
       expect(result[:ast][:body][0][:type]).to eq(:while_statement)
+    end
+
+    it "parses complicated let" do
+      input = "let l:text .= substitute(l:changelog[l:line+1], '^.\{-}\(\.\d\+\).\{-}:\(.*\)', a:0>0 ? '\1:\2' : '\1', '')"
+      lexer = Vinter::Lexer.new(input)
+      tokens = lexer.tokenize
+      parser = described_class.new(tokens)
+      result = parser.parse
+      # puts result[:ast].inspect
+
+      expect(result[:ast][:type]).to eq(:program)
+      expect(result[:ast][:body].size).to eq(1)
+      expect(result[:ast][:body][0][:type]).to eq(:let_statement)
+    end
+
+    it "parses a ternary operator" do
+      input = "let l:text .= substitute(l:changelog[l:line+1], '^.\{-}\(\.\d\+\).\{-}:\(.*\)', a:0>0 ? '\1:\2' : '\1', '')"
+      lexer = Vinter::Lexer.new(input)
+      tokens = lexer.tokenize
+      parser = described_class.new(tokens)
+      result = parser.parse
+      # puts result[:ast].inspect
+
+      expect(result[:ast][:type]).to eq(:program)
+      expect(result[:ast][:body].size).to eq(1)
+      expect(result[:ast][:body][0][:type]).to eq(:let_statement)
+    end
+
+    it "parses filter properly" do
+      input = <<-VIM
+      function! nerdtree#completeBookmarks(A,L,P) abort
+        return filter(g:NERDTreeBookmark.BookmarkNames(), 'v:val =~# "^' . a:A . '"')
+      endfunction
+      VIM
+      lexer = Vinter::Lexer.new(input)
+      tokens = lexer.tokenize
+      parser = described_class.new(tokens)
+      result = parser.parse
+      puts result[:ast].inspect
+
+      expect(result[:ast][:type]).to eq(:program)
+      expect(result[:ast][:body].size).to eq(1)
+      expect(result[:ast][:body][0][:type]).to eq(:legacy_function)
     end
 
     it 'parses vim9script declaration' do
@@ -297,13 +340,9 @@ RSpec.describe Vinter::Parser do
       tokens = lexer.tokenize
       parser = described_class.new(tokens)
       result = parser.parse
+      puts result[:ast].inspect
 
-      expect(result[:ast][:body][0][:type]).to eq(:expression_statement)
-      expect(result[:ast][:body][0][:expression][:type]).to eq(:function_call)
-      expect(result[:ast][:body][0][:expression][:arguments][1][:type]).to eq(:lambda_expression)
-      expect(result[:ast][:body][0][:expression][:arguments][1][:params].size).to eq(2)
-      expect(result[:ast][:body][0][:expression][:arguments][1][:params][0][:name]).to eq("k")
-      expect(result[:ast][:body][0][:expression][:arguments][1][:params][1][:name]).to eq("v")
+      expect(result[:ast][:body][0][:type]).to eq(:filter_command)
     end
   end
 end

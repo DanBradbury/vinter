@@ -24,6 +24,6 @@ end
 
 # Optional dependencies for development comfort
 group :development, :test do
-  gem "pry", "~> 0.14"
   gem "byebug", platforms: [:mri, :mingw, :x64_mingw]
 end
+gem "pry"

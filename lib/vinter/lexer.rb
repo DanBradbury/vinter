@@ -127,7 +127,7 @@ module Vinter
         end
         
         # Handle argument variables with a: prefix
-        if match = chunk.match(/\Aa:[a-zA-Z_][a-zA-Z0-9_]*/)
+        if match = chunk.match(/\Aa:[a-zA-Z_][a-zA-Z0-9_]*/) || match = chunk.match(/\Aa:[A-Z0-9]/)
           @tokens << {
             type: :arg_variable,
             value: match[0],
@@ -166,7 +166,7 @@ module Vinter
         end
 
         # Handle compound assignment operators
-        if match = chunk.match(/\A(\+=|-=|\*=|\/=|\.\.=)/)
+        if match = chunk.match(/\A(\+=|-=|\*=|\/=|\.\.=|\.=)/)
           @tokens << {
             type: :compound_operator,
             value: match[0],
@@ -192,7 +192,7 @@ module Vinter
         end
 
         # Handle multi-character operators explicitly
-        if match = chunk.match(/\A(==#|==|!=|=>|->|\.\.|\|\||&&)/)
+        if match = chunk.match(/\A(=~#|==#|==|!=|=>|->|\.\.|\|\||&&)/)
           @tokens << {
             type: :operator,
             value: match[0],

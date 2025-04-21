@@ -85,7 +85,7 @@ PLATFORMS
 DEPENDENCIES
   bundler (~> 2.3)
   byebug
-  pry (~> 0.14)
+  pry
   rake (~> 13.0)
   redcarpet (~> 3.6)
   rspec (~> 3.12)

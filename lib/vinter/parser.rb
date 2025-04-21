@@ -120,6 +120,8 @@ module Vinter
           parse_augroup_statement
         elsif current_token[:value] == "au" || current_token[:value] == "autocmd"
           parse_autocmd_statement
+        elsif current_token[:value] == "filter" || current_token[:value] == "filt"
+          parse_filter_command
         else
           parse_expression_statement
         end
@@ -142,6 +144,81 @@ module Vinter
         advance
         nil
       end
+    end
+
+    def parse_filter_command
+      token = advance # Skip 'filter' or 'filt'
+      line = token[:line]
+      column = token[:column]
+      
+      # Check for bang (!)
+      has_bang = false
+      if current_token && current_token[:type] == :operator && current_token[:value] == '!'
+        has_bang = true
+        advance # Skip '!'
+      end
+      
+      # Parse the pattern
+      pattern = nil
+      pattern_delimiter = nil
+      
+      if current_token && current_token[:type] == :operator && current_token[:value] == '/'
+        # Handle /pattern/ form
+        pattern_delimiter = '/'
+        advance # Skip opening delimiter
+        
+        # Collect all tokens until closing delimiter
+        pattern_parts = []
+        while @position < @tokens.length && 
+              !(current_token[:type] == :operator && current_token[:value] == pattern_delimiter)
+          pattern_parts << current_token[:value]
+          advance
+        end
+        
+        pattern = pattern_parts.join('')
+        
+        # Skip closing delimiter
+        if current_token && current_token[:type] == :operator && current_token[:value] == pattern_delimiter
+          advance
+        else
+          @errors << {
+            message: "Expected closing pattern delimiter: #{pattern_delimiter}",
+            position: @position,
+            line: current_token ? current_token[:line] : 0,
+            column: current_token ? current_token[:column] : 0
+          }
+        end
+      else
+        # Handle direct pattern form (without delimiters)
+        # Parse until we see what appears to be the command
+        pattern_parts = []
+        while @position < @tokens.length
+          # Don't consume tokens that likely belong to the command part
+          if current_token[:type] == :keyword || 
+             (current_token[:type] == :identifier && 
+              ['echo', 'let', 'execute', 'autocmd', 'au', 'oldfiles', 'clist', 'command',
+               'files', 'highlight', 'jumps', 'list', 'llist', 'marks', 'registers', 'set'].include?(current_token[:value]))
+            break
+          end
+          
+          pattern_parts << current_token[:value]
+          advance
+        end
+        
+        pattern = pattern_parts.join('').strip
+      end
+      
+      # Parse the command to be filtered
+      command = parse_statement
+      
+      {
+        type: :filter_command,
+        pattern: pattern,
+        has_bang: has_bang,
+        command: command,
+        line: line,
+        column: column
+      }
     end
 
     def parse_augroup_statement
@@ -903,8 +980,44 @@ module Vinter
          ['return', 'endif', 'endwhile', 'endfor', 'endfunction', 'endfunc'].include?(current_token[:value])
         return nil
       end
+
+      # Parse the condition expression
+      expr = parse_binary_expression
       
-      return parse_binary_expression
+      # Check if this is a ternary expression
+      if current_token && current_token[:type] == :operator && current_token[:value] == '?'
+        question_token = advance # Skip '?'
+        
+        # Parse the "then" expression
+        then_expr = parse_expression
+        
+        # Expect the colon
+        if current_token && current_token[:type] == :colon
+          colon_token = advance # Skip ':'
+          
+          # Parse the "else" expression
+          else_expr = parse_expression
+          
+          # Return the ternary expression
+          return {
+            type: :ternary_expression,
+            condition: expr,
+            then_expr: then_expr,
+            else_expr: else_expr,
+            line: question_token[:line],
+            column: question_token[:column]
+          }
+        else
+          @errors << {
+            message: "Expected ':' in ternary expression",
+            position: @position,
+            line: current_token ? current_token[:line] : 0,
+            column: current_token ? current_token[:column] : 0
+          }
+        end
+      end
+      
+      return expr
     end
 
     def parse_binary_expression(precedence = 0)
@@ -1123,10 +1236,10 @@ module Vinter
         }
       when :identifier
         # Special handling for Vim built-in functions
-        if token[:value] == 'has' || token[:value] == 'exists' || token[:value] == 'empty'
+        if ['has', 'exists', 'empty', 'filter', 'get'].include?(token[:value])
           return parse_builtin_function_call(token[:value], line, column)
         end
-
+    
         advance
 
         # Check if this is a function call
@@ -1194,7 +1307,7 @@ module Vinter
           dot_token = advance # Skip '.'
 
           # Next token should be an identifier (property name)
-          if !current_token || current_token[:type] != :identifier
+          if !current_token || current_token[:type] != :identifier && current_token[:type] != :arg_variable && current_token[:type] != :string
             @errors << {
               message: "Expected property name after '.'",
               position: @position,
@@ -1343,6 +1456,32 @@ module Vinter
         
         # Parse the argument
         arg = parse_expression
+
+        # Special handling for string concatenation in filter patterns
+        if name == 'filter' && args.length == 1 && 
+          arg && arg[:type] == :literal && arg[:token_type] == :string &&
+          current_token && current_token[:type] == :operator && current_token[:value] == '.'
+        
+          # This is a string concatenation within the filter pattern
+          concat_expr = {
+            type: :binary_expression,
+            operator: '.',
+            left: arg,
+            right: nil,
+            line: current_token[:line],
+            column: current_token[:column]
+          }
+          
+          advance # Skip the '.' operator
+          
+          # Parse the right side of concatenation
+          right = parse_expression
+          concat_expr[:right] = right
+          
+          # Use the concatenation expression as the argument
+          arg = concat_expr
+        end
+
         args << arg if arg
         
         # If we have a comma, advance past it and continue
@@ -1723,9 +1862,9 @@ module Vinter
 
     def parse_function_call(name, line, column)
       expect(:paren_open)
-
+      
       args = []
-
+      
       # Parse arguments until we find a closing parenthesis
       while @position < @tokens.length && current_token && current_token[:type] != :paren_close
         # Skip comments inside parameter lists
@@ -1733,21 +1872,43 @@ module Vinter
           advance
           next
         end
-
-        # Check if the argument might be a lambda expression
-        if current_token && current_token[:type] == :paren_open && is_lambda_expression
-          arg = parse_lambda_expression(current_token[:line], current_token[:column])
-        else
-          arg = parse_expression
-        end
-
+        
+        # Parse the argument
+        arg = parse_expression
         args << arg if arg
-
+        
         # Break if we hit the closing paren
         if current_token && current_token[:type] == :paren_close
           break
         end
-
+        
+        # If we're not at a comma or closing parenthesis, look ahead to find the next one
+        if current_token && 
+           current_token[:type] != :comma && 
+           current_token[:type] != :paren_close
+          
+          # Look ahead to see if there's a comma or closing parenthesis coming up
+          look_ahead_pos = @position
+          while look_ahead_pos < @tokens.length
+            next_token = @tokens[look_ahead_pos]
+            break if !next_token || next_token[:type] == :comma || next_token[:type] == :paren_close
+            look_ahead_pos += 1
+          end
+          
+          # If we found a comma ahead, advance to it
+          if look_ahead_pos < @tokens.length && @tokens[look_ahead_pos][:type] == :comma
+            @position = look_ahead_pos
+            advance  # Skip the comma
+            next
+          end
+          
+          # Otherwise advance to closing parenthesis if found
+          if look_ahead_pos < @tokens.length && @tokens[look_ahead_pos][:type] == :paren_close
+            @position = look_ahead_pos
+            next
+          end
+        end
+        
         # If we have a comma, advance past it and continue
         if current_token && current_token[:type] == :comma
           advance
@@ -1762,9 +1923,9 @@ module Vinter
           break
         end
       end
-
+      
       expect(:paren_close)
-
+      
       {
         type: :function_call,
         name: name,
