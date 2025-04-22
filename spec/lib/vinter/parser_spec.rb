@@ -175,7 +175,7 @@ RSpec.describe Vinter::Parser do
       tokens = lexer.tokenize
       parser = described_class.new(tokens)
       result = parser.parse
-      puts result[:ast].inspect
+      # puts result[:ast].inspect
 
       expect(result[:ast][:type]).to eq(:program)
       expect(result[:ast][:body].size).to eq(1)
@@ -340,9 +340,46 @@ RSpec.describe Vinter::Parser do
       tokens = lexer.tokenize
       parser = described_class.new(tokens)
       result = parser.parse
-      puts result[:ast].inspect
+      # puts result[:ast].inspect
 
       expect(result[:ast][:body][0][:type]).to eq(:filter_command)
+    end
+
+    it "parses silly function" do
+      input = <<-VIM
+        function! nerdtree#compareNodePaths(p1, p2) abort
+            " Keys are identical upto common length
+            " The key which has smaller chunks is the lesser one
+            return a:p1
+        endfunction
+      VIM
+
+      lexer = Vinter::Lexer.new(input)
+      tokens = lexer.tokenize
+      parser = described_class.new(tokens)
+      result = parser.parse
+      puts result[:ast].inspect
+
+      expect(result[:ast][:type]).to eq(:program)
+      expect(result[:ast][:body].size).to eq(1)
+      expect(result[:ast][:body][0][:type]).to eq(:legacy_function)
+    end
+
+    it "parses different types of returns" do
+      input = <<-VIM
+        function! test() abort
+          return '\'
+        endfunction
+      VIM
+      lexer = Vinter::Lexer.new(input)
+      tokens = lexer.tokenize
+      parser = described_class.new(tokens)
+      result = parser.parse
+      puts result[:ast].inspect
+
+      expect(result[:ast][:type]).to eq(:program)
+      expect(result[:ast][:body].size).to eq(1)
+      expect(result[:ast][:body][0][:type]).to eq(:legacy_function)
     end
   end
 end

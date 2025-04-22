@@ -10,7 +10,7 @@ module Vinter
       # Multi-character operators handled separately
       number: /\b\d+(\.\d+)?\b/,
       # Handle both single and double quoted strings
-      string: /"([^"\\]|\\.)*"|'([^'\\]|\\.)*'/,
+      # string: /"(\\"|[^"])*"|'(\\'|[^'])*'/,
       # Vim9 comments use #
       comment: /(#|").*/,
       whitespace: /\s+/,
@@ -42,7 +42,6 @@ module Vinter
         # First check if the line starts with a quote (comment in Vim)
         current_line_start = @input.rindex("\n", @position) || 0
         current_line_start += 1 if @input[current_line_start] == "\n"
-        
         # If we're at the start of a line and it begins with a quote
         if @position == current_line_start && chunk.start_with?('"')
           # Find the end of the line
@@ -60,6 +59,45 @@ module Vinter
           @column += comment_text.length
           next
         end
+        # Handle string literals manually
+        if chunk.start_with?("'") || chunk.start_with?('"')
+          quote = chunk[0]
+          i = 1
+          escaped = false
+          string_value = quote
+          
+          # Keep going until we find an unescaped closing quote
+          while i < chunk.length
+            char = chunk[i]
+            string_value += char
+            
+            if char == '\\' && !escaped
+              escaped = true
+            elsif char == quote && !escaped
+              # Found closing quote
+              break
+            elsif escaped
+              escaped = false
+            end
+            
+            i += 1
+          end
+          
+          # Add the string token if we found a closing quote
+          if i < chunk.length || (i == chunk.length && chunk[-1] == quote)
+            @tokens << {
+              type: :string,
+              value: string_value,
+              line: @line_num,
+              column: @column
+            }
+            
+            @column += string_value.length
+            @position += string_value.length
+            next
+          end
+        end
+
 
         # Check for keywords first, before other token types
         if match = chunk.match(/\A\b(if|else|elseif|endif|while|endwhile|for|endfor|def|enddef|function|endfunction|endfunc|return|const|var|final|import|export|class|extends|static|enum|type|vim9script|abort|autocmd|echoerr|echohl|echomsg|let|execute)\b/)

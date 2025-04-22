@@ -126,14 +126,18 @@ module Vinter
           parse_expression_statement
         end
       elsif current_token[:type] == :comment
+        puts "parse coment"
         parse_comment
       elsif current_token[:type] == :string && current_token[:value].start_with?('"')
-        token = current_token
-        line = token[:line]
-        column = token[:column]
-        value = token[:value]
-        advance
-        { type: :comment, value: value, line: line, column: column }
+        puts "parse string"
+        # binding.pry
+        parse_comment
+        # token = current_token
+        # line = token[:line]
+        # column = token[:column]
+        # value = token[:value]
+        # advance
+        # { type: :comment, value: value, line: line, column: column }
       else
         @warnings << {
           message: "Unexpected token type: #{current_token[:type]}",
@@ -420,9 +424,51 @@ module Vinter
     end
 
     def parse_comment
-      comment = current_token[:value]
-      line = current_token[:line]
-      column = current_token[:column]
+      original_token = current_token
+      line = original_token[:line]
+      column = original_token[:column]
+      comment = original_token[:value]
+
+      # puts "INSIDE PARSE COMMENT"
+      # puts "Current token: #{current_token.inspect}"
+      # puts "Peek token: #{peek_token.inspect}"
+
+      # Check if the comment contains a newline
+      if comment.include?("\n")
+        # Split the comment at the newline
+        parts = comment.split("\n", 2)
+        comment = parts[0] # Only use the part before newline
+        
+        # Create a new token for the content after the newline
+        remainder = parts[1].strip
+        
+        if !remainder.empty?
+          # Position correctly - we'll advance past the current token
+          # But should process the remainder separately later
+          
+          # For debugging only, you can print what's being processed
+          # puts "Found comment with newline. Using: '#{comment}', Remainder: '#{remainder}'"
+          
+          # Don't call advance() - we'll modify the current token instead
+          @tokens[@position] = {
+            type: :string,  # Keep original type
+            value: comment, # Use only the part before newline
+            line: line,
+            column: column
+          }
+          
+          # Insert the remainder as a new token after the current one
+          @tokens.insert(@position + 1, {
+            type: :comment,  # Same type for consistency
+            value: remainder, # Preserve as a string token
+            line: line + 1, # Increment line number for the part after newline
+            column: 0 # Approximate column based on indentation
+          })
+        end
+      end
+      # binding.pry
+    
+      # Now advance past the (potentially modified) current token
       advance
       { type: :comment, value: comment, line: line, column: column }
     end
@@ -975,6 +1021,7 @@ module Vinter
     end
 
     def parse_expression
+      # binding.pry
       # Special case for empty return statements or standalone keywords that shouldn't be expressions
       if current_token && current_token[:type] == :keyword && 
          ['return', 'endif', 'endwhile', 'endfor', 'endfunction', 'endfunc'].include?(current_token[:value])
@@ -1165,10 +1212,12 @@ module Vinter
             column: column
           }
         else
+          string_value = token[:value]
           advance
           expr = {
             type: :literal,
-            value: token[:value],
+            value: string_value,
+            raw_value: string_value, # Store the raw string to preserve escapes
             token_type: :string,
             line: line,
             column: column

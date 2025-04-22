@@ -256,3 +256,370 @@ endfunction
 function! nerdtree#completeBookmarks(A,L,P) abort
     return filter(g:NERDTreeBookmark.BookmarkNames(), 'v:val =~# "^' . a:A . '"')
 endfunction
+
+"FUNCTION: nerdtree#compareNodes(n1, n2) {{{2
+function! nerdtree#compareNodes(n1, n2) abort
+    return nerdtree#compareNodePaths(a:n1.path, a:n2.path)
+endfunction
+
+"FUNCTION: nerdtree#compareNodePaths(p1, p2) {{{2
+function! nerdtree#compareNodePaths(p1, p2) abort
+    " Keys are identical upto common length
+    " The key which has smaller chunks is the lesser one
+    return a:p1
+endfunction
+" FUNCTION: nerdtree#deprecated(func, [msg]) {{{2
+" Issue a deprecation warning for a:func. If a second arg is given, use this
+" as the deprecation message
+function! nerdtree#deprecated(func, ...) abort
+    let msg = a:0 ? a:func . ' ' . a:1 : a:func . ' is deprecated'
+
+    if !exists('s:deprecationWarnings')
+        let s:deprecationWarnings = {}
+    endif
+    if !has_key(s:deprecationWarnings, a:func)
+        let s:deprecationWarnings[a:func] = 1
+        echomsg msg
+    endif
+endfunction
+
+" FUNCTION: nerdtree#exec(cmd, ignoreAll) {{{2
+" Same as :exec cmd but, if ignoreAll is TRUE, set eventignore=all for the duration
+function! nerdtree#exec(cmd, ignoreAll) abort
+    let old_ei = &eventignore
+    if a:ignoreAll
+        set eventignore=all
+    endif
+    try
+        exec a:cmd
+    finally
+        let &eventignore = old_ei
+    endtry
+endfunction
+" FUNCTION: nerdtree#has_opt(options, name) {{{2
+function! nerdtree#has_opt(options, name) abort
+    return has_key(a:options, a:name) && a:options[a:name] ==# 1
+endfunction
+
+" FUNCTION: nerdtree#loadClassFiles() {{{2
+function! nerdtree#loadClassFiles() abort
+    runtime lib/nerdtree/path.vim
+    runtime lib/nerdtree/menu_controller.vim
+    runtime lib/nerdtree/menu_item.vim
+    runtime lib/nerdtree/key_map.vim
+    runtime lib/nerdtree/bookmark.vim
+    runtime lib/nerdtree/tree_file_node.vim
+    runtime lib/nerdtree/tree_dir_node.vim
+    runtime lib/nerdtree/opener.vim
+    runtime lib/nerdtree/creator.vim
+    runtime lib/nerdtree/flag_set.vim
+    runtime lib/nerdtree/nerdtree.vim
+    runtime lib/nerdtree/ui.vim
+    runtime lib/nerdtree/event.vim
+    runtime lib/nerdtree/notifier.vim
+endfunction
+" FUNCTION: nerdtree#postSourceActions() {{{2
+function! nerdtree#postSourceActions() abort
+    call g:NERDTreeBookmark.CacheBookmarks(1)
+    call nerdtree#ui_glue#createDefaultBindings()
+
+    "load all nerdtree plugins
+    runtime! nerdtree_plugin/**/*.vim
+endfunction
+
+"FUNCTION: nerdtree#runningWindows() {{{2
+function! nerdtree#runningWindows() abort
+    return has('win16') || has('win32') || has('win64')
+endfunction
+
+"FUNCTION: nerdtree#runningCygwin() {{{2
+function! nerdtree#runningCygwin() abort
+    return has('win32unix')
+endfunction
+
+"FUNCTION: nerdtree#runningMac() {{{2
+function! nerdtree#runningMac() abort
+    return has('gui_mac') || has('gui_macvim') || has('mac') || has('osx')
+endfunction
+
+" FUNCTION: nerdtree#osDefaultCaseSensitiveFS() {{{2
+function! nerdtree#osDefaultCaseSensitiveFS() abort
+    return s:osDefaultCaseSensitiveFS
+endfunction
+
+" FUNCTION: nerdtree#caseSensitiveFS() {{{2
+function! nerdtree#caseSensitiveFS() abort
+    return g:NERDTreeCaseSensitiveFS == 1 ||
+                \((g:NERDTreeCaseSensitiveFS == 2 || g:NERDTreeCaseSensitiveFS == 3) &&
+                \nerdtree#osDefaultCaseSensitiveFS())
+endfunction
+
+"FUNCTION: nerdtree#pathEquals(lhs, rhs) {{{2
+function! nerdtree#pathEquals(lhs, rhs) abort
+    if nerdtree#caseSensitiveFS()
+        return a:lhs ==# a:rhs
+    else
+        return a:lhs ==? a:rhs
+    endif
+endfunction
+"FUNCTION: nerdtree#onBufLeave() {{{2
+" used for handling the nerdtree BufLeave/WinLeave events.
+function! nerdtree#onBufLeave() abort
+    " detect whether we are in the middle of sourcing a session.
+    " if it is a buffer from the sourced session we need to restore it.
+    if exists('g:SessionLoad') && !exists('b:NERDTree')
+        let bname = bufname('%')
+        " is the buffer for a tab tree?
+        if bname =~# '^' . g:NERDTreeCreator.BufNamePrefix() . 'tab_\d\+$'
+            " rename loaded buffer and mark it as trash to prevent this event
+            " getting fired again
+            exec 'file TRASH_' . bname
+            " delete the trash buffer
+            exec 'bwipeout!'
+            " rescue the tab tree at the current working directory
+            call g:NERDTreeCreator.CreateTabTree(getcwd())
+        " is the buffer for a window tree?
+        elseif bname =~# '^' . g:NERDTreeCreator.BufNamePrefix(). 'win_\d\+$'
+            " rescue the window tree at the current working directory
+            call g:NERDTreeCreator.CreateWindowTree(getcwd())
+        else " unknown buffer type
+            " rename buffer to mark it as broken.
+            exec 'file BROKEN_' . bname
+            call nerdtree#echoError('Failed to restore "' . bname . '" from session. Is this session created with an older version of NERDTree?')
+        endif
+    else
+        if g:NERDTree.IsOpen()
+            call b:NERDTree.ui.saveScreenState()
+        endif
+    endif
+endfunction
+" SECTION: View Functions {{{1
+"============================================================
+
+"FUNCTION: nerdtree#echo  {{{2
+"A wrapper for :echo. Appends 'NERDTree:' on the front of all messages
+"
+"Args:
+"msg: the message to echo
+function! nerdtree#echo(msg) abort
+    redraw
+    echomsg empty(a:msg) ? '' : ('NERDTree: ' . a:msg)
+endfunction
+
+"FUNCTION: nerdtree#echoError {{{2
+"Wrapper for nerdtree#echo, sets the message type to errormsg for this message
+"Args:
+"msg: the message to echo
+function! nerdtree#echoError(msg) abort
+    echohl errormsg
+    call nerdtree#echo(a:msg)
+    echohl normal
+endfunction
+
+"FUNCTION: nerdtree#echoWarning {{{2
+"Wrapper for nerdtree#echo, sets the message type to warningmsg for this message
+"Args:
+"msg: the message to echo
+function! nerdtree#echoWarning(msg) abort
+    echohl warningmsg
+    call nerdtree#echo(a:msg)
+    echohl normal
+endfunction
+
+"FUNCTION: nerdtree#renderView {{{2
+function! nerdtree#renderView() abort
+    call b:NERDTree.render()
+endfunction
+
+if nerdtree#runningWindows()
+    let s:osDefaultCaseSensitiveFS = 0
+elseif nerdtree#runningMac()
+    let s:osDefaultCaseSensitiveFS = 0
+else
+    let s:osDefaultCaseSensitiveFS = 1
+endif
+if exists('g:loaded_nerdtree_ui_glue_autoload')
+    finish
+endif
+let g:loaded_nerdtree_ui_glue_autoload = 1
+
+" FUNCTION: nerdtree#ui_glue#createDefaultBindings() {{{1
+function! nerdtree#ui_glue#createDefaultBindings() abort
+    let s = '<SNR>' . s:SID() . '_'
+
+    call NERDTreeAddKeyMap({ 'key': '<MiddleMouse>', 'scope': 'all', 'callback': s . 'handleMiddleMouse' })
+    call NERDTreeAddKeyMap({ 'key': '<LeftRelease>', 'scope': 'all', 'callback': s.'handleLeftClick' })
+    call NERDTreeAddKeyMap({ 'key': '<2-LeftMouse>', 'scope': 'DirNode', 'callback': s.'activateDirNode' })
+    call NERDTreeAddKeyMap({ 'key': '<2-LeftMouse>', 'scope': 'FileNode', 'callback': s.'activateFileNode' })
+    call NERDTreeAddKeyMap({ 'key': '<2-LeftMouse>', 'scope': 'Bookmark', 'callback': s.'activateBookmark' })
+    call NERDTreeAddKeyMap({ 'key': '<2-LeftMouse>', 'scope': 'all', 'callback': s.'activateAll' })
+
+    call NERDTreeAddKeyMap({ 'key': g:NERDTreeMapCustomOpen, 'scope':'FileNode', 'callback': s.'customOpenFile'})
+    call NERDTreeAddKeyMap({ 'key': g:NERDTreeMapCustomOpen, 'scope':'DirNode', 'callback': s.'customOpenDir'})
+    call NERDTreeAddKeyMap({ 'key': g:NERDTreeMapCustomOpen, 'scope':'Bookmark', 'callback': s.'customOpenBookmark'})
+    call NERDTreeAddKeyMap({ 'key': g:NERDTreeMapCustomOpen, 'scope':'all', 'callback': s.'activateAll' })
+
+    call NERDTreeAddKeyMap({ 'key': g:NERDTreeMapActivateNode, 'scope': 'DirNode', 'callback': s.'activateDirNode' })
+    call NERDTreeAddKeyMap({ 'key': g:NERDTreeMapActivateNode, 'scope': 'FileNode', 'callback': s.'activateFileNode' })
+    call NERDTreeAddKeyMap({ 'key': g:NERDTreeMapActivateNode, 'scope': 'Bookmark', 'callback': s.'activateBookmark' })
+    call NERDTreeAddKeyMap({ 'key': g:NERDTreeMapPreview, 'scope': 'Bookmark', 'callback': s.'previewBookmark' })
+    call NERDTreeAddKeyMap({ 'key': g:NERDTreeMapActivateNode, 'scope': 'all', 'callback': s.'activateAll' })
+
+    call NERDTreeAddKeyMap({ 'key': g:NERDTreeMapOpenSplit, 'scope': 'FileNode', 'callback': s.'openHSplit' })
+    call NERDTreeAddKeyMap({ 'key': g:NERDTreeMapOpenSplit, 'scope': 'Bookmark', 'callback': s.'openHSplitBookmark' })
+    call NERDTreeAddKeyMap({ 'key': g:NERDTreeMapOpenVSplit, 'scope': 'FileNode', 'callback': s.'openVSplit' })
+    call NERDTreeAddKeyMap({ 'key': g:NERDTreeMapOpenVSplit, 'scope': 'Bookmark', 'callback': s.'openVSplitBookmark' })
+
+    call NERDTreeAddKeyMap({ 'key': g:NERDTreeMapPreview, 'scope': 'FileNode', 'callback': s.'previewNodeCurrent' })
+    call NERDTreeAddKeyMap({ 'key': g:NERDTreeMapPreviewSplit, 'scope': 'FileNode', 'callback': s.'previewNodeHSplit' })
+    call NERDTreeAddKeyMap({ 'key': g:NERDTreeMapPreviewSplit, 'scope': 'Bookmark', 'callback': s.'previewNodeHSplitBookmark' })
+    call NERDTreeAddKeyMap({ 'key': g:NERDTreeMapPreviewVSplit, 'scope': 'FileNode', 'callback': s.'previewNodeVSplit' })
+    call NERDTreeAddKeyMap({ 'key': g:NERDTreeMapPreviewVSplit, 'scope': 'Bookmark', 'callback': s.'previewNodeVSplitBookmark' })
+
+    call NERDTreeAddKeyMap({ 'key': g:NERDTreeMapOpenRecursively, 'scope': 'DirNode', 'callback': s.'openNodeRecursively' })
+
+    call NERDTreeAddKeyMap({ 'key': g:NERDTreeMapUpdir, 'scope': 'all', 'callback': s . 'upDirCurrentRootClosed' })
+    call NERDTreeAddKeyMap({ 'key': g:NERDTreeMapUpdirKeepOpen, 'scope': 'all', 'callback': s . 'upDirCurrentRootOpen' })
+    call NERDTreeAddKeyMap({ 'key': g:NERDTreeMapChangeRoot, 'scope': 'Node', 'callback': s . 'chRoot' })
+
+    call NERDTreeAddKeyMap({ 'key': g:NERDTreeMapChdir, 'scope': 'Node', 'callback': s.'chCwd' })
+
+    call NERDTreeAddKeyMap({ 'key': g:NERDTreeMapQuit, 'scope': 'all', 'callback': s.'closeTreeWindow' })
+
+    call NERDTreeAddKeyMap({ 'key': g:NERDTreeMapCWD, 'scope': 'all', 'callback': 'nerdtree#ui_glue#chRootCwd' })
+
+    call NERDTreeAddKeyMap({ 'key': g:NERDTreeMapRefreshRoot, 'scope': 'all', 'callback': s.'refreshRoot' })
+    call NERDTreeAddKeyMap({ 'key': g:NERDTreeMapRefresh, 'scope': 'Node', 'callback': s.'refreshCurrent' })
+
+    call NERDTreeAddKeyMap({ 'key': g:NERDTreeMapHelp, 'scope': 'all', 'callback': s.'displayHelp' })
+    call NERDTreeAddKeyMap({ 'key': g:NERDTreeMapToggleZoom, 'scope': 'all', 'callback': s.'toggleZoom' })
+    call NERDTreeAddKeyMap({ 'key': g:NERDTreeMapToggleHidden, 'scope': 'all', 'callback': s.'toggleShowHidden' })
+    call NERDTreeAddKeyMap({ 'key': g:NERDTreeMapToggleFilters, 'scope': 'all', 'callback': s.'toggleIgnoreFilter' })
+    call NERDTreeAddKeyMap({ 'key': g:NERDTreeMapToggleFiles, 'scope': 'all', 'callback': s.'toggleShowFiles' })
+    call NERDTreeAddKeyMap({ 'key': g:NERDTreeMapToggleBookmarks, 'scope': 'all', 'callback': s.'toggleShowBookmarks' })
+    call NERDTreeAddKeyMap({ 'key': g:NERDTreeMapToggleFileLines, 'scope': 'all', 'callback': s.'toggleShowFileLines' })
+
+    call NERDTreeAddKeyMap({ 'key': g:NERDTreeMapCloseDir, 'scope': 'Node', 'callback': s.'closeCurrentDir' })
+    call NERDTreeAddKeyMap({ 'key': g:NERDTreeMapCloseChildren, 'scope': 'DirNode', 'callback': s.'closeChildren' })
+
+    call NERDTreeAddKeyMap({ 'key': g:NERDTreeMapMenu, 'scope': 'Node', 'callback': s.'showMenu' })
+
+    call NERDTreeAddKeyMap({ 'key': g:NERDTreeMapJumpParent, 'scope': 'Node', 'callback': s.'jumpToParent' })
+    call NERDTreeAddKeyMap({ 'key': g:NERDTreeMapJumpFirstChild, 'scope': 'Node', 'callback': s.'jumpToFirstChild' })
+    call NERDTreeAddKeyMap({ 'key': g:NERDTreeMapJumpLastChild, 'scope': 'Node', 'callback': s.'jumpToLastChild' })
+    call NERDTreeAddKeyMap({ 'key': g:NERDTreeMapJumpRoot, 'scope': 'all', 'callback': s.'jumpToRoot' })
+    call NERDTreeAddKeyMap({ 'key': g:NERDTreeMapJumpNextSibling, 'scope': 'Node', 'callback': s.'jumpToNextSibling' })
+    call NERDTreeAddKeyMap({ 'key': g:NERDTreeMapJumpPrevSibling, 'scope': 'Node', 'callback': s.'jumpToPrevSibling' })
+    call NERDTreeAddKeyMap({ 'key': g:NERDTreeMapJumpBookmarks, 'scope': 'all', 'callback': s.'jumpToBookmarks' })
+
+    call NERDTreeAddKeyMap({ 'key': g:NERDTreeMapOpenInTab, 'scope': 'Node', 'callback': s . 'openInNewTab' })
+    call NERDTreeAddKeyMap({ 'key': g:NERDTreeMapOpenInTabSilent, 'scope': 'Node', 'callback': s . 'openInNewTabSilent' })
+    call NERDTreeAddKeyMap({ 'key': g:NERDTreeMapOpenInTab, 'scope': 'Bookmark', 'callback': s . 'openInNewTab' })
+    call NERDTreeAddKeyMap({ 'key': g:NERDTreeMapOpenInTabSilent, 'scope': 'Bookmark', 'callback': s . 'openInNewTabSilent' })
+
+    call NERDTreeAddKeyMap({ 'key': g:NERDTreeMapOpenExpl, 'scope': 'DirNode', 'callback': s.'openExplorer' })
+    call NERDTreeAddKeyMap({ 'key': g:NERDTreeMapOpenExpl, 'scope': 'FileNode', 'callback': s.'openExplorer' })
+
+    call NERDTreeAddKeyMap({ 'key': g:NERDTreeMapDeleteBookmark, 'scope': 'Bookmark', 'callback': s.'deleteBookmark' })
+endfunction
+function! copilot_chat#open_chat() abort
+
+    call copilot_chat#auth#verify_signin()
+  
+    if copilot_chat#buffer#has_active_chat() &&
+       \  g:copilot_reuse_active_chat == 1
+      call copilot_chat#buffer#focus_active_chat()
+    else
+      call copilot_chat#buffer#create()
+      normal! G
+    endif
+  endfunction
+  
+  function! copilot_chat#start_chat(message) abort
+    call copilot_chat#open_chat()
+    call copilot_chat#buffer#append_message(a:message)
+    call copilot_chat#api#async_request(a:message)
+  endfunction
+  
+  function! copilot_chat#reset_chat() abort
+    if g:copilot_chat_active_buffer == -1 || !bufexists(g:copilot_chat_active_buffer)
+      echom 'No active chat window to reset'
+      return
+    endif
+  
+    let l:current_buf = bufnr('%')
+  
+    " Switch to the active chat buffer if not already there
+    if l:current_buf != g:copilot_chat_active_buffer
+      execute 'buffer ' . g:copilot_chat_active_buffer
+    endif
+  
+    silent! %delete _
+  
+    call copilot_chat#buffer#welcome_message()
+  
+    normal! G
+  
+    if l:current_buf != g:copilot_chat_active_buffer && bufexists(l:current_buf)
+      execute 'buffer ' . l:current_buf
+    endif
+  endfunction
+  
+  function! copilot_chat#submit_message() abort
+    let l:separator_line = search(' ━\+$', 'nw')
+    let l:start_line = l:separator_line + 1
+    let l:end_line = line('$')
+  
+    let l:lines = getline(l:start_line, l:end_line)
+  
+    for l:i in range(len(l:lines))
+      let l:line = l:lines[l:i]
+      if l:line =~? '^> \(\w\+\)'
+        let l:text = matchstr(l:line, '^> \(\w\+\)')
+        let l:text = substitute(l:text, '^> ', '', '')
+        if has_key(g:copilot_chat_prompts, l:text)
+          let l:lines[l:i] = g:copilot_chat_prompts[l:text]
+        endif
+      endif
+    endfor
+    let l:message = join(l:lines, "\n")
+  
+    call copilot_chat#api#async_request(l:message)
+  endfunction
+  
+  function! copilot_chat#http(method, url, headers, body) abort
+    if has('win32')
+      let l:ps_cmd = 'powershell -Command "'
+      let l:ps_cmd .= '$headers = @{'
+      for header in a:headers
+        let [key, value] = split(header, ': ')
+        let l:ps_cmd .= "'" . key . "'='" . value . "';"
+      endfor
+      let l:ps_cmd .= '};'
+      if a:method !=# 'GET'
+        let l:ps_cmd .= '$body = ConvertTo-Json @{'
+        for obj in keys(a:body)
+          let l:ps_cmd .= obj . "='" . a:body[obj] . "';"
+        endfor
+        let l:ps_cmd .= '};'
+      endif
+      let l:ps_cmd .= "Invoke-WebRequest -Uri '" . a:url . "' -Method " .a:method . " -Headers $headers -Body $body -ContentType 'application/json' | Select-Object -ExpandProperty Content"
+      let l:ps_cmd .= '"'
+      let l:response = system(l:ps_cmd)
+    else
+      let l:token_data = json_encode(a:body)
+  
+      let l:curl_cmd = 'curl -s -X ' . a:method . ' --compressed '
+      for header in a:headers
+        let l:curl_cmd .= '-H "' . header . '" '
+      endfor
+      let l:curl_cmd .= "-d '" . l:token_data . "' " . a:url
+  
+      let l:response = system(l:curl_cmd)
+      if v:shell_error != 0
+        echom 'Error: ' . v:shell_error
+        return ''
+      endif
+    endif
+    return l:response
+  endfunction
