@@ -22,9 +22,16 @@ RSpec.describe 'Integration Tests' do
     pp issues
     # Temporarily disabled until we fully support all legacy Vim script syntax
     expect(issues.size).to eq(0)
-    expect(true).to be true
   end
 
+  it 'copilot_chat parsing' do
+    file_path = File.join(File.dirname(__FILE__), '..', 'fixtures', 'copilot_chat.vim')
+    content = File.read(file_path)
+    issues = linter.lint(content).select { |f| f[:type] == :error }
+    pp issues
+    # Temporarily disabled until we fully support all legacy Vim script syntax
+    expect(issues.size).to eq(0)
+  end
 
   it 'correctly identifies issues in an invalid vim9 script file' do
     file_path = File.join(File.dirname(__FILE__), '..', 'fixtures', 'invalid_vim9.vim')

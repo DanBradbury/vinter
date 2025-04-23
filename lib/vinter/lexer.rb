@@ -2,7 +2,7 @@ module Vinter
   class Lexer
     TOKEN_TYPES = {
       # Vim9 specific keywords
-      keyword: /\b(if|else|elseif|endif|while|endwhile|for|endfor|def|enddef|function|endfunction|endfunc|return|const|var|final|import|export|class|extends|static|enum|type|vim9script|abort|autocmd|echoerr|echohl|echomsg|let|execute|continue|break|try|catch|finally|endtry|throw|runtime)\b/,
+      keyword: /\b(if|else|elseif|endif|while|endwhile|for|endfor|def|enddef|function|endfunction|endfunc|return|const|var|final|import|export|class|extends|static|enum|type|vim9script|abort|autocmd|echoerr|echohl|echomsg|let|execute|continue|break|try|catch|finally|endtry|throw|runtime|silent|delete)\b/,
       # Identifiers can include # and special characters
       identifier: /\b[a-zA-Z_][a-zA-Z0-9_#]*\b/,
       # Single-character operators
@@ -98,6 +98,19 @@ module Vinter
           end
         end
 
+        # Also add special handling for 'silent!' keyword
+        # Add this after the keyword check in tokenize method
+        if chunk.start_with?('silent!')
+          @tokens << {
+            type: :silent_bang,
+            value: 'silent!',
+            line: @line_num,
+            column: @column
+          }
+          @column += 7
+          @position += 7
+          next
+        end
 
         # Check for keywords first, before other token types
         if match = chunk.match(/\A\b(if|else|elseif|endif|while|endwhile|for|endfor|def|enddef|function|endfunction|endfunc|return|const|var|final|import|export|class|extends|static|enum|type|vim9script|abort|autocmd|echoerr|echohl|echomsg|let|execute)\b/)

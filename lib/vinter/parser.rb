@@ -163,6 +163,12 @@ module Vinter
         # value = token[:value]
         # advance
         # { type: :comment, value: value, line: line, column: column }
+      elsif current_token[:type] == :silent_bang
+        parse_silent_command
+      elsif current_token[:type] == :identifier && current_token[:value] == 'delete'
+        parse_delete_command
+      elsif current_token[:type] == :percentage
+        parse_range_command
       else
         @warnings << {
           message: "Unexpected token type: #{current_token[:type]}",
@@ -173,6 +179,59 @@ module Vinter
         advance
         nil
       end
+    end
+
+    def parse_silent_command
+      token = advance # Skip 'silent!'
+      line = token[:line]
+      column = token[:column]
+      
+      # Parse the command that follows silent!
+      command = parse_statement
+      
+      {
+        type: :silent_command,
+        command: command,
+        line: line,
+        column: column
+      }
+    end
+
+    def parse_delete_command
+      token = advance # Skip 'delete'
+      line = token[:line]
+      column = token[:column]
+      
+      # Check for register argument
+      register = nil
+      if current_token && current_token[:type] == :underscore
+        register = current_token[:value]
+        advance
+      end
+      
+      {
+        type: :delete_command,
+        register: register,
+        line: line,
+        column: column
+      }
+    end
+    
+    def parse_range_command
+      token = advance # Skip '%'
+      line = token[:line]
+      column = token[:column]
+      
+      # Parse the command that follows the range
+      command = parse_statement
+      
+      {
+        type: :range_command,
+        range: '%',
+        command: command,
+        line: line,
+        column: column
+      }
     end
 
     def parse_runtime_statement
@@ -394,8 +453,62 @@ module Vinter
               column: bracket_token[:column]
             }
           end
+        when :bracket_open
+          # Handle array destructuring like: let [key, value] = split(header, ': ')
+          bracket_token = advance # Skip '['
+          
+          # Parse the variable names inside the brackets
+          destructuring_targets = []
+          
+          # Parse comma-separated list of variables
+          while current_token && current_token[:type] != :bracket_close
+            # Skip commas between variables
+            if current_token[:type] == :comma
+              advance
+              next
+            end
+            
+            # Parse the variable name
+            if current_token && (
+              current_token[:type] == :identifier ||
+              current_token[:type] == :global_variable ||
+              current_token[:type] == :script_local ||
+              current_token[:type] == :arg_variable ||
+              current_token[:type] == :option_variable ||
+              current_token[:type] == :special_variable ||
+              current_token[:type] == :local_variable
+            )
+              destructuring_targets << {
+                type: current_token[:type],
+                name: current_token[:value],
+                line: current_token[:line],
+                column: current_token[:column]
+              }
+              advance
+            else
+              @errors << {
+                message: "Expected variable name in destructuring assignment",
+                position: @position,
+                line: current_token ? current_token[:line] : 0,
+                column: current_token ? current_token[:column] : 0
+              }
+              # Try to recover by advancing to next comma or closing bracket
+              while current_token && current_token[:type] != :comma && current_token[:type] != :bracket_close
+                advance
+              end
+            end
+          end
+          
+          expect(:bracket_close) # Skip ']'
+          
+          target = {
+            type: :destructuring_assignment,
+            targets: destructuring_targets,
+            line: bracket_token[:line],
+            column: bracket_token[:column]
+          }
         else
-          @errors << {
+              @errors << {
             message: "Expected variable name after let",
             position: @position,
             line: current_token ? current_token[:line] : 0,
@@ -702,7 +815,7 @@ module Vinter
         loop_vars = []
 
         loop do
-          if current_token && current_token[:type] == :identifier
+          if current_token && (current_token[:type] == :identifier || current_token[:type] == :local_variable)
             loop_vars << advance[:value]
           else
             @errors << {
@@ -760,7 +873,7 @@ module Vinter
         }
       else
         # Simple for var in list
-        if !current_token || current_token[:type] != :identifier
+        if !current_token || (current_token[:type] != :identifier && current_token[:type] != :local_variable)
           @errors << {
             message: "Expected identifier as for loop variable",
             position: @position,
