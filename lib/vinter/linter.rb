@@ -94,7 +94,7 @@ module Vinter
       lexer = Lexer.new(content)
       tokens = lexer.tokenize
 
-      parser = Parser.new(tokens)
+      parser = Parser.new(tokens, content)
       result = parser.parse
 
       issues = []

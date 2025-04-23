@@ -19,7 +19,7 @@ RSpec.describe 'Integration Tests' do
     # In the future, this should be updated to properly validate legacy syntax
     # issues = linter.lint(content)
     issues = linter.lint(content).select { |f| f[:type] == :error }
-    puts issues.inspect
+    pp issues
     # Temporarily disabled until we fully support all legacy Vim script syntax
     expect(issues.size).to eq(0)
     expect(true).to be true

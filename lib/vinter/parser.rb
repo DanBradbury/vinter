@@ -1,10 +1,11 @@
 module Vinter
   class Parser
-    def initialize(tokens)
+    def initialize(tokens, source_text = nil)
       @tokens = tokens
       @position = 0
       @errors = []
       @warnings = []
+      @source_text = source_text
     end
 
     def parse
@@ -42,8 +43,30 @@ module Vinter
         found = current_token ? current_token[:type] : "end of input"
         line = current_token ? current_token[:line] : 0
         column = current_token ? current_token[:column] : 0
+        
+        # Get the full line content from the input if available
+        line_content = nil
+        if line > 0 && @tokens.length > 0
+          # Find tokens on the same line
+          same_line_tokens = @tokens.select { |t| t[:line] == line }
+          if !same_line_tokens.empty?
+            # Create a representation of the line with a marker at the error position
+            line_representation = same_line_tokens.map { |t| t[:value] }.join('')
+            line_content = "Line content: #{line_representation}"
+          end
+        end
+        
         error = "Expected #{expected} but found #{found}"
-        @errors << { message: error, position: @position, line: line, column: column }
+        error += ", at line #{line}, column #{column}"
+        error += "\n#{line_content}" if line_content
+        
+        @errors << { 
+          message: error, 
+          position: @position, 
+          line: line, 
+          column: column,
+          line_content: line_content
+        }
         nil
       end
     end
@@ -70,7 +93,11 @@ module Vinter
         return nil
       end
 
-      if current_token[:type] == :keyword
+      if current_token[:type] == :runtime_command
+        parse_runtime_statement
+      elsif current_token[:type] == :keyword && current_token[:value] == 'runtime'
+        parse_runtime_statement
+      elsif current_token[:type] == :keyword
         case current_token[:value]
         when 'if'
           parse_if_statement
@@ -126,10 +153,8 @@ module Vinter
           parse_expression_statement
         end
       elsif current_token[:type] == :comment
-        puts "parse coment"
         parse_comment
       elsif current_token[:type] == :string && current_token[:value].start_with?('"')
-        puts "parse string"
         # binding.pry
         parse_comment
         # token = current_token
@@ -148,6 +173,38 @@ module Vinter
         advance
         nil
       end
+    end
+
+    def parse_runtime_statement
+      token = advance # Skip 'runtime' or 'runtime!'
+      line = token[:line]
+      column = token[:column]
+      
+      is_bang = token[:type] == :runtime_command || 
+               (token[:value] == 'runtime' && current_token && current_token[:type] == :operator && current_token[:value] == '!')
+      
+      # Skip the '!' if it's separate token
+      if token[:type] != :runtime_command && is_bang
+        advance # Skip '!'
+      end
+      
+      # Collect the pattern argument
+      pattern_parts = []
+      while @position < @tokens.length && 
+            !(current_token[:type] == :keyword || current_token[:value] == "\n")
+        pattern_parts << current_token[:value]
+        advance
+      end
+      
+      pattern = pattern_parts.join('').strip
+      
+      {
+        type: :runtime_statement,
+        bang: is_bang,
+        pattern: pattern,
+        line: line,
+        column: column
+      }
     end
 
     def parse_filter_command
@@ -322,6 +379,21 @@ module Vinter
             column: current_token[:column]
           }
           advance
+          # Check if this is an indexed access (dictionary key lookup)
+          if current_token && current_token[:type] == :bracket_open
+            bracket_token = advance # Skip '['
+            index_expr = parse_expression
+            expect(:bracket_close) # Skip ']'
+
+            # Update target to be an indexed access
+            target = {
+              type: :indexed_access,
+              object: target,
+              index: index_expr,
+              line: bracket_token[:line],
+              column: bracket_token[:column]
+            }
+          end
         else
           @errors << {
             message: "Expected variable name after let",
@@ -1479,87 +1551,55 @@ module Vinter
       # Skip the function name (already consumed)
       advance if current_token[:value] == name
       
-      # Expect opening parenthesis
+      # Check if there's an opening parenthesis
       if current_token && current_token[:type] == :paren_open
         advance # Skip '('
-      else
-        @errors << {
-          message: "Expected '(' after #{name} function",
-          position: @position,
-          line: current_token ? current_token[:line] : 0,
-          column: current_token ? current_token[:column] : 0
-        }
-        return nil
-      end
-    
-      # Parse arguments
-      args = []
-      
-      # Parse until we find closing parenthesis
-      while @position < @tokens.length && current_token && current_token[:type] != :paren_close
-        # Skip any whitespace or comments
-        if current_token[:type] == :whitespace || current_token[:type] == :comment
-          advance
-          next
+        
+        # Parse arguments
+        args = []
+        
+        # Parse until closing parenthesis
+        while @position < @tokens.length && current_token && current_token[:type] != :paren_close
+          # Skip whitespace or comments
+          if current_token[:type] == :whitespace || current_token[:type] == :comment
+            advance
+            next
+          end
+          
+          arg = parse_expression
+          args << arg if arg
+          
+          if current_token && current_token[:type] == :comma
+            advance
+          elsif current_token && current_token[:type] != :paren_close
+            @errors << {
+              message: "Expected comma or closing parenthesis in #{name} function",
+              position: @position,
+              line: current_token[:line],
+              column: current_token[:column]
+            }
+            break
+          end
         end
         
-        # Parse the argument
-        arg = parse_expression
-
-        # Special handling for string concatenation in filter patterns
-        if name == 'filter' && args.length == 1 && 
-          arg && arg[:type] == :literal && arg[:token_type] == :string &&
-          current_token && current_token[:type] == :operator && current_token[:value] == '.'
-        
-          # This is a string concatenation within the filter pattern
-          concat_expr = {
-            type: :binary_expression,
-            operator: '.',
-            left: arg,
-            right: nil,
-            line: current_token[:line],
-            column: current_token[:column]
-          }
-          
-          advance # Skip the '.' operator
-          
-          # Parse the right side of concatenation
-          right = parse_expression
-          concat_expr[:right] = right
-          
-          # Use the concatenation expression as the argument
-          arg = concat_expr
-        end
-
-        args << arg if arg
-        
-        # If we have a comma, advance past it and continue
-        if current_token && current_token[:type] == :comma
-          advance
-        elsif current_token && current_token[:type] != :paren_close
+        # Check for closing parenthesis
+        if current_token && current_token[:type] == :paren_close
+          advance # Skip ')'
+        else
           @errors << {
-            message: "Expected comma or closing parenthesis in #{name} function",
+            message: "Expected ')' to close #{name} function call",
             position: @position,
-            line: current_token[:line],
-            column: current_token[:column]
+            line: current_token ? current_token[:line] : 0,
+            column: current_token ? current_token[:column] : 0
           }
-          break
         end
-      end
-      
-      # Expect closing parenthesis
-      if current_token && current_token[:type] == :paren_close
-        advance # Skip ')'
       else
-        @errors << {
-          message: "Expected ')' to close #{name} function call",
-          position: @position,
-          line: current_token ? current_token[:line] : 0,
-          column: current_token ? current_token[:column] : 0
-        }
+        # Handle legacy Vim script where parentheses might be omitted
+        # Just parse one expression as the argument
+        args = [parse_expression]
       end
       
-      # Return the function call node
+      # Return function call node
       {
         type: :builtin_function_call,
         name: name,

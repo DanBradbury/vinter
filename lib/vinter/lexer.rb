@@ -2,7 +2,7 @@ module Vinter
   class Lexer
     TOKEN_TYPES = {
       # Vim9 specific keywords
-      keyword: /\b(if|else|elseif|endif|while|endwhile|for|endfor|def|enddef|function|endfunction|endfunc|return|const|var|final|import|export|class|extends|static|enum|type|vim9script|abort|autocmd|echoerr|echohl|echomsg|let|execute|continue|break|try|catch|finally|endtry|throw)\b/,
+      keyword: /\b(if|else|elseif|endif|while|endwhile|for|endfor|def|enddef|function|endfunction|endfunc|return|const|var|final|import|export|class|extends|static|enum|type|vim9script|abort|autocmd|echoerr|echohl|echomsg|let|execute|continue|break|try|catch|finally|endtry|throw|runtime)\b/,
       # Identifiers can include # and special characters
       identifier: /\b[a-zA-Z_][a-zA-Z0-9_#]*\b/,
       # Single-character operators
@@ -230,7 +230,7 @@ module Vinter
         end
 
         # Handle multi-character operators explicitly
-        if match = chunk.match(/\A(=~#|==#|==|!=|=>|->|\.\.|\|\||&&)/)
+        if match = chunk.match(/\A(=~#|=~\?|=~|==#|==\?|==|!=#|!=\?|!=|=>\?|=>|>=#|>=\?|>=|<=#|<=\?|<=|->#|->\?|->|\.\.|\|\||&&)/)
           @tokens << {
             type: :operator,
             value: match[0],
