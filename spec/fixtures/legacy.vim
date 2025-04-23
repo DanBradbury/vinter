@@ -347,3 +347,178 @@ function! nerdtree#osDefaultCaseSensitiveFS() abort
     return s:osDefaultCaseSensitiveFS
 endfunction
 
+" FUNCTION: nerdtree#caseSensitiveFS() {{{2
+function! nerdtree#caseSensitiveFS() abort
+    return g:NERDTreeCaseSensitiveFS == 1 ||
+                \((g:NERDTreeCaseSensitiveFS == 2 || g:NERDTreeCaseSensitiveFS == 3) &&
+                \nerdtree#osDefaultCaseSensitiveFS())
+endfunction
+
+"FUNCTION: nerdtree#pathEquals(lhs, rhs) {{{2
+function! nerdtree#pathEquals(lhs, rhs) abort
+    if nerdtree#caseSensitiveFS()
+        return a:lhs ==# a:rhs
+    else
+        return a:lhs ==? a:rhs
+    endif
+endfunction
+"FUNCTION: nerdtree#onBufLeave() {{{2
+" used for handling the nerdtree BufLeave/WinLeave events.
+function! nerdtree#onBufLeave() abort
+    " detect whether we are in the middle of sourcing a session.
+    " if it is a buffer from the sourced session we need to restore it.
+    if exists('g:SessionLoad') && !exists('b:NERDTree')
+        let bname = bufname('%')
+        " is the buffer for a tab tree?
+        if bname =~# '^' . g:NERDTreeCreator.BufNamePrefix() . 'tab_\d\+$'
+            " rename loaded buffer and mark it as trash to prevent this event
+            " getting fired again
+            exec 'file TRASH_' . bname
+            " delete the trash buffer
+            exec 'bwipeout!'
+            " rescue the tab tree at the current working directory
+            call g:NERDTreeCreator.CreateTabTree(getcwd())
+        " is the buffer for a window tree?
+        elseif bname =~# '^' . g:NERDTreeCreator.BufNamePrefix(). 'win_\d\+$'
+            " rescue the window tree at the current working directory
+            call g:NERDTreeCreator.CreateWindowTree(getcwd())
+        else " unknown buffer type
+            " rename buffer to mark it as broken.
+            exec 'file BROKEN_' . bname
+            call nerdtree#echoError('Failed to restore "' . bname . '" from session. Is this session created with an older version of NERDTree?')
+        endif
+    else
+        if g:NERDTree.IsOpen()
+            call b:NERDTree.ui.saveScreenState()
+        endif
+    endif
+endfunction
+" SECTION: View Functions {{{1
+"============================================================
+
+"FUNCTION: nerdtree#echo  {{{2
+"A wrapper for :echo. Appends 'NERDTree:' on the front of all messages
+"
+"Args:
+"msg: the message to echo
+function! nerdtree#echo(msg) abort
+    redraw
+    echomsg empty(a:msg) ? '' : ('NERDTree: ' . a:msg)
+endfunction
+
+"FUNCTION: nerdtree#echoError {{{2
+"Wrapper for nerdtree#echo, sets the message type to errormsg for this message
+"Args:
+"msg: the message to echo
+function! nerdtree#echoError(msg) abort
+    echohl errormsg
+    call nerdtree#echo(a:msg)
+    echohl normal
+endfunction
+
+"FUNCTION: nerdtree#echoWarning {{{2
+"Wrapper for nerdtree#echo, sets the message type to warningmsg for this message
+"Args:
+"msg: the message to echo
+function! nerdtree#echoWarning(msg) abort
+    echohl warningmsg
+    call nerdtree#echo(a:msg)
+    echohl normal
+endfunction
+
+"FUNCTION: nerdtree#renderView {{{2
+function! nerdtree#renderView() abort
+    call b:NERDTree.render()
+endfunction
+
+if nerdtree#runningWindows()
+    let s:osDefaultCaseSensitiveFS = 0
+elseif nerdtree#runningMac()
+    let s:osDefaultCaseSensitiveFS = 0
+else
+    let s:osDefaultCaseSensitiveFS = 1
+endif
+if exists('g:loaded_nerdtree_ui_glue_autoload')
+    finish
+endif
+let g:loaded_nerdtree_ui_glue_autoload = 1
+
+" FUNCTION: nerdtree#ui_glue#createDefaultBindings() {{{1
+function! nerdtree#ui_glue#createDefaultBindings() abort
+    let s = '<SNR>' . s:SID() . '_'
+
+    call NERDTreeAddKeyMap({ 'key': '<MiddleMouse>', 'scope': 'all', 'callback': s . 'handleMiddleMouse' })
+    call NERDTreeAddKeyMap({ 'key': '<LeftRelease>', 'scope': 'all', 'callback': s.'handleLeftClick' })
+    call NERDTreeAddKeyMap({ 'key': '<2-LeftMouse>', 'scope': 'DirNode', 'callback': s.'activateDirNode' })
+    call NERDTreeAddKeyMap({ 'key': '<2-LeftMouse>', 'scope': 'FileNode', 'callback': s.'activateFileNode' })
+    call NERDTreeAddKeyMap({ 'key': '<2-LeftMouse>', 'scope': 'Bookmark', 'callback': s.'activateBookmark' })
+    call NERDTreeAddKeyMap({ 'key': '<2-LeftMouse>', 'scope': 'all', 'callback': s.'activateAll' })
+
+    call NERDTreeAddKeyMap({ 'key': g:NERDTreeMapCustomOpen, 'scope':'FileNode', 'callback': s.'customOpenFile'})
+    call NERDTreeAddKeyMap({ 'key': g:NERDTreeMapCustomOpen, 'scope':'DirNode', 'callback': s.'customOpenDir'})
+    call NERDTreeAddKeyMap({ 'key': g:NERDTreeMapCustomOpen, 'scope':'Bookmark', 'callback': s.'customOpenBookmark'})
+    call NERDTreeAddKeyMap({ 'key': g:NERDTreeMapCustomOpen, 'scope':'all', 'callback': s.'activateAll' })
+
+    call NERDTreeAddKeyMap({ 'key': g:NERDTreeMapActivateNode, 'scope': 'DirNode', 'callback': s.'activateDirNode' })
+    call NERDTreeAddKeyMap({ 'key': g:NERDTreeMapActivateNode, 'scope': 'FileNode', 'callback': s.'activateFileNode' })
+    call NERDTreeAddKeyMap({ 'key': g:NERDTreeMapActivateNode, 'scope': 'Bookmark', 'callback': s.'activateBookmark' })
+    call NERDTreeAddKeyMap({ 'key': g:NERDTreeMapPreview, 'scope': 'Bookmark', 'callback': s.'previewBookmark' })
+    call NERDTreeAddKeyMap({ 'key': g:NERDTreeMapActivateNode, 'scope': 'all', 'callback': s.'activateAll' })
+
+    call NERDTreeAddKeyMap({ 'key': g:NERDTreeMapOpenSplit, 'scope': 'FileNode', 'callback': s.'openHSplit' })
+    call NERDTreeAddKeyMap({ 'key': g:NERDTreeMapOpenSplit, 'scope': 'Bookmark', 'callback': s.'openHSplitBookmark' })
+    call NERDTreeAddKeyMap({ 'key': g:NERDTreeMapOpenVSplit, 'scope': 'FileNode', 'callback': s.'openVSplit' })
+    call NERDTreeAddKeyMap({ 'key': g:NERDTreeMapOpenVSplit, 'scope': 'Bookmark', 'callback': s.'openVSplitBookmark' })
+
+    call NERDTreeAddKeyMap({ 'key': g:NERDTreeMapPreview, 'scope': 'FileNode', 'callback': s.'previewNodeCurrent' })
+    call NERDTreeAddKeyMap({ 'key': g:NERDTreeMapPreviewSplit, 'scope': 'FileNode', 'callback': s.'previewNodeHSplit' })
+    call NERDTreeAddKeyMap({ 'key': g:NERDTreeMapPreviewSplit, 'scope': 'Bookmark', 'callback': s.'previewNodeHSplitBookmark' })
+    call NERDTreeAddKeyMap({ 'key': g:NERDTreeMapPreviewVSplit, 'scope': 'FileNode', 'callback': s.'previewNodeVSplit' })
+    call NERDTreeAddKeyMap({ 'key': g:NERDTreeMapPreviewVSplit, 'scope': 'Bookmark', 'callback': s.'previewNodeVSplitBookmark' })
+
+    call NERDTreeAddKeyMap({ 'key': g:NERDTreeMapOpenRecursively, 'scope': 'DirNode', 'callback': s.'openNodeRecursively' })
+
+    call NERDTreeAddKeyMap({ 'key': g:NERDTreeMapUpdir, 'scope': 'all', 'callback': s . 'upDirCurrentRootClosed' })
+    call NERDTreeAddKeyMap({ 'key': g:NERDTreeMapUpdirKeepOpen, 'scope': 'all', 'callback': s . 'upDirCurrentRootOpen' })
+    call NERDTreeAddKeyMap({ 'key': g:NERDTreeMapChangeRoot, 'scope': 'Node', 'callback': s . 'chRoot' })
+
+    call NERDTreeAddKeyMap({ 'key': g:NERDTreeMapChdir, 'scope': 'Node', 'callback': s.'chCwd' })
+
+    call NERDTreeAddKeyMap({ 'key': g:NERDTreeMapQuit, 'scope': 'all', 'callback': s.'closeTreeWindow' })
+
+    call NERDTreeAddKeyMap({ 'key': g:NERDTreeMapCWD, 'scope': 'all', 'callback': 'nerdtree#ui_glue#chRootCwd' })
+
+    call NERDTreeAddKeyMap({ 'key': g:NERDTreeMapRefreshRoot, 'scope': 'all', 'callback': s.'refreshRoot' })
+    call NERDTreeAddKeyMap({ 'key': g:NERDTreeMapRefresh, 'scope': 'Node', 'callback': s.'refreshCurrent' })
+
+    call NERDTreeAddKeyMap({ 'key': g:NERDTreeMapHelp, 'scope': 'all', 'callback': s.'displayHelp' })
+    call NERDTreeAddKeyMap({ 'key': g:NERDTreeMapToggleZoom, 'scope': 'all', 'callback': s.'toggleZoom' })
+    call NERDTreeAddKeyMap({ 'key': g:NERDTreeMapToggleHidden, 'scope': 'all', 'callback': s.'toggleShowHidden' })
+    call NERDTreeAddKeyMap({ 'key': g:NERDTreeMapToggleFilters, 'scope': 'all', 'callback': s.'toggleIgnoreFilter' })
+    call NERDTreeAddKeyMap({ 'key': g:NERDTreeMapToggleFiles, 'scope': 'all', 'callback': s.'toggleShowFiles' })
+    call NERDTreeAddKeyMap({ 'key': g:NERDTreeMapToggleBookmarks, 'scope': 'all', 'callback': s.'toggleShowBookmarks' })
+    call NERDTreeAddKeyMap({ 'key': g:NERDTreeMapToggleFileLines, 'scope': 'all', 'callback': s.'toggleShowFileLines' })
+
+    call NERDTreeAddKeyMap({ 'key': g:NERDTreeMapCloseDir, 'scope': 'Node', 'callback': s.'closeCurrentDir' })
+    call NERDTreeAddKeyMap({ 'key': g:NERDTreeMapCloseChildren, 'scope': 'DirNode', 'callback': s.'closeChildren' })
+
+    call NERDTreeAddKeyMap({ 'key': g:NERDTreeMapMenu, 'scope': 'Node', 'callback': s.'showMenu' })
+
+    call NERDTreeAddKeyMap({ 'key': g:NERDTreeMapJumpParent, 'scope': 'Node', 'callback': s.'jumpToParent' })
+    call NERDTreeAddKeyMap({ 'key': g:NERDTreeMapJumpFirstChild, 'scope': 'Node', 'callback': s.'jumpToFirstChild' })
+    call NERDTreeAddKeyMap({ 'key': g:NERDTreeMapJumpLastChild, 'scope': 'Node', 'callback': s.'jumpToLastChild' })
+    call NERDTreeAddKeyMap({ 'key': g:NERDTreeMapJumpRoot, 'scope': 'all', 'callback': s.'jumpToRoot' })
+    call NERDTreeAddKeyMap({ 'key': g:NERDTreeMapJumpNextSibling, 'scope': 'Node', 'callback': s.'jumpToNextSibling' })
+    call NERDTreeAddKeyMap({ 'key': g:NERDTreeMapJumpPrevSibling, 'scope': 'Node', 'callback': s.'jumpToPrevSibling' })
+    call NERDTreeAddKeyMap({ 'key': g:NERDTreeMapJumpBookmarks, 'scope': 'all', 'callback': s.'jumpToBookmarks' })
+
+    call NERDTreeAddKeyMap({ 'key': g:NERDTreeMapOpenInTab, 'scope': 'Node', 'callback': s . 'openInNewTab' })
+    call NERDTreeAddKeyMap({ 'key': g:NERDTreeMapOpenInTabSilent, 'scope': 'Node', 'callback': s . 'openInNewTabSilent' })
+    call NERDTreeAddKeyMap({ 'key': g:NERDTreeMapOpenInTab, 'scope': 'Bookmark', 'callback': s . 'openInNewTab' })
+    call NERDTreeAddKeyMap({ 'key': g:NERDTreeMapOpenInTabSilent, 'scope': 'Bookmark', 'callback': s . 'openInNewTabSilent' })
+
+    call NERDTreeAddKeyMap({ 'key': g:NERDTreeMapOpenExpl, 'scope': 'DirNode', 'callback': s.'openExplorer' })
+    call NERDTreeAddKeyMap({ 'key': g:NERDTreeMapOpenExpl, 'scope': 'FileNode', 'callback': s.'openExplorer' })
+
+    call NERDTreeAddKeyMap({ 'key': g:NERDTreeMapDeleteBookmark, 'scope': 'Bookmark', 'callback': s.'deleteBookmark' })
+endfunction

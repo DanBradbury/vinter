@@ -1151,9 +1151,22 @@ module Vinter
         if current_token[:type] == :whitespace
           advance
         end
-
         
-        if current_token && current_token[:type] == :operator &&
+        if current_token && current_token[:type] == :operator && current_token[:value] == '.' &&
+          operator_precedence(current_token[:value]) >= precedence
+         
+         op_token = advance # Skip the operator
+         right = parse_binary_expression(operator_precedence('.') + 1)
+         
+         left = {
+           type: :binary_expression,
+           operator: '.',
+           left: left,
+           right: right,
+           line: op_token[:line],
+           column: op_token[:column]
+         }
+        elsif current_token && current_token[:type] == :operator &&
           ['<', '>', '=', '!'].include?(current_token[:value]) &&
           peek_token && peek_token[:type] == :operator && peek_token[:value] == '='
          
@@ -1425,28 +1438,36 @@ module Vinter
       while current_token
         # Check for property access with dot
         if current_token[:type] == :operator && current_token[:value] == '.'
-          dot_token = advance # Skip '.'
+          # Check if this is a property access (only when left side is an identifier or object)
+          if expr[:type] == :identifier || expr[:type] == :global_variable || 
+            expr[:type] == :script_local || expr[:type] == :namespace_prefix
 
-          # Next token should be an identifier (property name)
-          if !current_token || current_token[:type] != :identifier && current_token[:type] != :arg_variable && current_token[:type] != :string
-            @errors << {
-              message: "Expected property name after '.'",
-              position: @position,
-              line: current_token ? current_token[:line] : 0,
-              column: current_token ? current_token[:column] : 0
+            dot_token = advance # Skip '.'
+            # Next token should be an identifier (property name)
+            if !current_token || (current_token[:type] != :identifier && 
+              current_token[:type] != :arg_variable && 
+              current_token[:type] != :string)
+                @errors << {
+                  message: "Expected property name after '.'",
+                  position: @position,
+                  line: current_token ? current_token[:line] : 0,
+                  column: current_token ? current_token[:column] : 0
+                }
+                break
+            end
+            property_token = advance
+
+            expr = {
+              type: :property_access,
+              object: expr,
+              property: property_token[:value],
+              line: dot_token[:line],
+              column: dot_token[:column]
             }
+          else
             break
           end
-
-          property_token = advance # Get property name
-
-          expr = {
-            type: :property_access,
-            object: expr,
-            property: property_token[:value],
-            line: dot_token[:line],
-            column: dot_token[:column]
-          }
+  
         # Check for method call with arrow ->
         elsif current_token[:type] == :operator && current_token[:value] == '->'
           arrow_token = advance # Skip '->'

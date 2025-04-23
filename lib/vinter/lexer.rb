@@ -73,7 +73,7 @@ module Vinter
             
             if char == '\\' && !escaped
               escaped = true
-            elsif char == quote && !escaped
+            elsif (char == "\n" or char == quote) && !escaped
               # Found closing quote
               break
             elsif escaped
