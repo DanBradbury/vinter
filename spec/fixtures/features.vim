@@ -182,3 +182,93 @@ for k in range(1, 10)
   endif
   echo "K value: " . k
 endfor
+
+" -----------------------------------------------------------------------------
+" 5. Exception Handling
+" -----------------------------------------------------------------------------
+" Try-catch-finally blocks
+try
+  " Code that might cause an error
+  echo "Trying something..."
+  " throw "Custom error"  " Uncomment to throw an error
+catch /Custom/    " Catch specific errors
+  echo "Caught custom error"
+catch /^Vim\%((\a\+)\)\=:E/    " Catch all Vim errors
+  echo "Caught Vim error: " . v:exception
+catch /.*/       " Catch any other errors
+  echo "Caught error: " . v:exception . " at " . v:throwpoint
+finally          " Always executed
+  echo "Finally block executed"
+endtry
+
+" Practical example
+try
+  " Try to use a plugin command that might not exist
+  call NonExistentFunction()
+catch
+  echo "Function doesn't exist, using fallback"
+endtry
+
+" -----------------------------------------------------------------------------
+" 6. Functions
+" -----------------------------------------------------------------------------
+" 6.1 Basic function
+function! HelloWorld()
+  echo "Hello, World!"
+endfunction
+
+" 6.2 Function with arguments
+function! Greet(name)
+  echo "Hello, " . a:name . "!"
+endfunction
+
+" 6.3 Function with default arguments
+function! GreetWithDefault(name, greeting = "Hello")
+  echo a:greeting . ", " . a:name . "!"
+endfunction
+
+" 6.4 Function with variable number of arguments
+function! Sum(...)
+  let result = 0
+  for i in range(a:0)  " a:0 is the number of extra arguments
+    let result += a:000[i]  " a:000 is the list of extra arguments
+  endfor
+  return result
+endfunction
+
+" 6.5 Function with both fixed and variable arguments
+function! CalculateWithBase(base, ...)
+  let result = a:base
+  for i in range(a:0)
+    let result += a:000[i]
+  endfor
+  return result
+endfunction
+
+" 6.6 Function with range support
+function! ReverseLines() range
+  for line_num in range(a:firstline, a:lastline)
+    let curr_line = getline(line_num)
+    let reversed = join(reverse(split(curr_line, '\zs')), '')
+    call setline(line_num, reversed)
+  endfor
+endfunction
+
+" 6.7 Function with dictionary context
+function! s:dict_function() dict
+  echo "Name: " . self.name
+  echo "Age: " . self.age
+endfunction
+
+let person = {'name': 'John', 'age': 30, 'display': function('s:dict_function')}
+
+" 6.8 Function that returns a value
+function! Add(a, b)
+  return a:a + a:b
+endfunction
+
+" 6.9 Calling functions
+call HelloWorld()                " Call with no return value
+let result = Add(10, 20)         " Call with return value
+let str_len = Funcref("Vim")     " Call through a funcref
+let uppercase = Capitalize("vim")  " Call a lambda function

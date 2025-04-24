@@ -1959,6 +1959,101 @@ module Vinter
       return has_params && has_arrow
     end
 
+    def parse_vim_lambda(line, column)
+      advance # Skip opening brace
+
+      # Parse parameters
+      params = []
+
+      # Parse parameter(s)
+      if current_token && (current_token[:type] == :identifier ||
+                          current_token[:type] == :local_variable ||
+                          current_token[:type] == :global_variable)
+        param_name = current_token[:value]
+        param_line = current_token[:line]
+        param_column = current_token[:column]
+        advance
+
+        params << {
+          type: :parameter,
+          name: param_name,
+          line: param_line,
+          column: param_column
+        }
+
+        # Handle multiple parameters (comma-separated)
+        while current_token && current_token[:type] == :comma
+          advance # Skip comma
+
+          if current_token && (current_token[:type] == :identifier ||
+                              current_token[:type] == :local_variable ||
+                              current_token[:type] == :global_variable)
+            param_name = current_token[:value]
+            param_line = current_token[:line]
+            param_column = current_token[:column]
+            advance
+
+            params << {
+              type: :parameter,
+              name: param_name,
+              line: param_line,
+              column: param_column
+            }
+          else
+            @errors << {
+              message: "Expected parameter name after comma in lambda function",
+              position: @position,
+              line: current_token ? current_token[:line] : 0,
+              column: current_token ? current_token[:column] : 0
+            }
+            break
+          end
+        end
+      else
+        @errors << {
+          message: "Expected parameter name in lambda function",
+          position: @position,
+          line: current_token ? current_token[:line] : 0,
+          column: current_token ? current_token[:column] : 0
+        }
+      end
+
+      # Expect the arrow token
+      if current_token && current_token[:type] == :operator && current_token[:value] == '->'
+        advance # Skip ->
+      else
+        @errors << {
+          message: "Expected '->' in lambda function",
+          position: @position,
+          line: current_token ? current_token[:line] : 0,
+          column: current_token ? current_token[:column] : 0
+        }
+      end
+
+      # Parse the lambda body expression (everything until the closing brace)
+      body = parse_expression
+
+      # Expect closing brace
+      if current_token && current_token[:type] == :brace_close
+        advance # Skip }
+      else
+        @errors << {
+          message: "Expected closing brace for lambda function",
+          position: @position,
+          line: current_token ? current_token[:line] : 0,
+          column: current_token ? current_token[:column] : 0
+        }
+      end
+
+      return {
+        type: :vim_lambda,
+        params: params,
+        body: body,
+        line: line,
+        column: column
+      }
+    end
+
     def parse_lambda_expression(line, column)
       expect(:paren_open)  # Skip '('
 
@@ -2628,18 +2723,38 @@ module Vinter
       loop do
         if current_token && current_token[:type] == :identifier
           param_name = advance
+
+          # Check for default value
+          default_value = nil
+          if current_token && current_token[:type] == :operator && current_token[:value] == '='
+            advance # Skip '='
+            default_value = parse_expression
+          end
+
           params << {
             type: :parameter,
             name: param_name[:value],
+            default_value: default_value,
+            optional: default_value != nil,
             line: param_name[:line],
             column: param_name[:column]
           }
         elsif current_token && current_token[:type] == :arg_variable
           param_name = advance
           name_without_prefix = param_name[:value].sub(/^a:/, '')
+
+          # Check for default value
+          default_value = nil
+          if current_token && current_token[:type] == :operator && current_token[:value] == '='
+            advance # Skip '='
+            default_value = parse_expression
+          end
+
           params << {
             type: :parameter,
             name: name_without_prefix,
+            default_value: default_value,
+            optional: default_value != nil,
             line: param_name[:line],
             column: param_name[:column],
             is_arg_prefixed: true
