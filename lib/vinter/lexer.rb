@@ -283,7 +283,7 @@ module Vinter
         end
 
         # Handle multi-character operators explicitly
-        if match = chunk.match(/\A(=~#|=~\?|=~|==#|==\?|==|!=#|!=\?|!=|=>\?|=>|>=#|>=\?|>=|<=#|<=\?|<=|->#|->\?|->|\.\.|\|\||&&)/)
+        if match = chunk.match(/\A(=~#|=~\?|=~|!~#|!~\?|!~|==#|==\?|==|!=#|!=\?|!=|=>\?|=>|>=#|>=\?|>=|<=#|<=\?|<=|->#|->\?|->|\.\.|\|\||&&)/)
           @tokens << {
             type: :operator,
             value: match[0],
@@ -320,6 +320,20 @@ module Vinter
           }
           @column += 1
           @position += 1
+          next
+        end
+
+        # Check for special case where 'function' is followed by '('
+        # which likely means it's used as a built-in function
+        if chunk =~ /\Afunction\s*\(/
+          @tokens << {
+            type: :identifier,  # Treat as identifier, not keyword
+            value: 'function',
+            line: @line_num,
+            column: @column
+          }
+          @column += 'function'.length
+          @position += 'function'.length
           next
         end
 

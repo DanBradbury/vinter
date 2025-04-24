@@ -534,8 +534,48 @@ module Vinter
       end
 
       # Parse the value expression
-      value = parse_expression
+      value = nil
 
+      # Special handling for function() references in let statements
+      if current_token && current_token[:type] == :keyword && current_token[:value] == 'function'
+        advance # Skip 'function'
+
+        # Expect opening parenthesis
+        if current_token && current_token[:type] == :paren_open
+          paren_token = advance # Skip '('
+
+          # Parse the function name as a string
+          func_name = nil
+          if current_token && current_token[:type] == :string
+            func_name = current_token[:value]
+            advance
+          else
+            @errors << {
+              message: "Expected string with function name in function() call",
+              position: @position,
+              line: current_token ? current_token[:line] : 0,
+              column: current_token ? current_token[:column] : 0
+            }
+          end
+
+          # Expect closing parenthesis
+          expect(:paren_close) # Skip ')'
+
+          value = {
+            type: :function_reference,
+            function_name: func_name,
+            line: line,
+            column: column
+          }
+        else
+          # If not followed by parenthesis, parse as a normal expression
+          @position -= 1 # Go back to the 'function' keyword
+          value = parse_expression
+        end
+      else
+        # Normal expression parsing
+        value = parse_expression
+      end
       {
         type: :let_statement,
         target: target,
@@ -807,16 +847,88 @@ module Vinter
       line = token[:line]
       column = token[:column]
 
-      # Parse the loop variable(s)
-      if current_token && current_token[:type] == :paren_open
-        # Handle tuple assignment: for (key, val) in dict
+      # Two main patterns:
+      # 1. for [key, val] in dict - destructuring with bracket_open
+      # 2. for var in list - simple variable with identifier
+
+      if current_token && current_token[:type] == :bracket_open
+        # Handle destructuring assignment: for [key, val] in dict
+        advance # Skip '['
+
+        loop_vars = []
+
+        loop do
+          if current_token && (current_token[:type] == :identifier ||
+                              current_token[:type] == :local_variable ||
+                              current_token[:type] == :global_variable ||
+                              current_token[:type] == :script_local)
+            loop_vars << advance
+          else
+            @errors << {
+              message: "Expected identifier in for loop variables",
+              position: @position,
+              line: current_token ? current_token[:line] : 0,
+              column: current_token ? current_token[:column] : 0
+            }
+            break
+          end
+
+          if current_token && current_token[:type] == :comma
+            advance # Skip ','
+          else
+            break
+          end
+        end
+
+        expect(:bracket_close) # Skip ']'
+
+        if !current_token || (current_token[:type] != :identifier || current_token[:value] != 'in')
+          @errors << {
+            message: "Expected 'in' after for loop variables",
+            position: @position,
+            line: current_token ? current_token[:line] : 0,
+            column: current_token ? current_token[:column] : 0
+          }
+        else
+          advance # Skip 'in'
+        end
+
+        iterable = parse_expression
+
+        # Parse the body until 'endfor'
+        body = []
+        while @position < @tokens.length
+          if current_token && current_token[:type] == :keyword && current_token[:value] == 'endfor'
+            break
+          end
+
+          stmt = parse_statement
+          body << stmt if stmt
+        end
+
+        # Expect endfor
+        expect(:keyword) # This should be 'endfor'
+
+        return {
+          type: :for_statement,
+          loop_vars: loop_vars,
+          iterable: iterable,
+          body: body,
+          line: line,
+          column: column
+        }
+      elsif current_token && current_token[:type] == :paren_open
+        # Handle multiple variables in parentheses: for (var1, var2) in list
         advance # Skip '('
 
         loop_vars = []
 
         loop do
-          if current_token && (current_token[:type] == :identifier || current_token[:type] == :local_variable)
-            loop_vars << advance[:value]
+          if current_token && (current_token[:type] == :identifier ||
+                              current_token[:type] == :local_variable ||
+                              current_token[:type] == :global_variable ||
+                              current_token[:type] == :script_local)
+            loop_vars << advance
           else
             @errors << {
               message: "Expected identifier in for loop variables",
@@ -852,7 +964,7 @@ module Vinter
         # Parse the body until 'endfor'
         body = []
         while @position < @tokens.length
-          if current_token[:type] == :keyword && current_token[:value] == 'endfor'
+          if current_token && current_token[:type] == :keyword && current_token[:value] == 'endfor'
             break
           end
 
@@ -872,18 +984,21 @@ module Vinter
           column: column
         }
       else
-        # Simple for var in list
-        if !current_token || (current_token[:type] != :identifier && current_token[:type] != :local_variable)
+        # Handle single variable: for var in list
+        if current_token && (current_token[:type] == :identifier ||
+                            current_token[:type] == :local_variable ||
+                            current_token[:type] == :global_variable ||
+                            current_token[:type] == :script_local)
+          loop_var = advance
+        else
           @errors << {
             message: "Expected identifier as for loop variable",
             position: @position,
             line: current_token ? current_token[:line] : 0,
             column: current_token ? current_token[:column] : 0
           }
-          return nil
+          loop_var = nil
         end
-
-        loop_var = advance[:value]
 
         if !current_token || (current_token[:type] != :identifier || current_token[:value] != 'in')
           @errors << {
@@ -901,7 +1016,7 @@ module Vinter
         # Parse the body until 'endfor'
         body = []
         while @position < @tokens.length
-          if current_token[:type] == :keyword && current_token[:value] == 'endfor'
+          if current_token && current_token[:type] == :keyword && current_token[:value] == 'endfor'
             break
           end
 
@@ -1365,8 +1480,50 @@ module Vinter
       case token[:type]
       # Add special handling for keywords that might appear in expressions
       when :keyword
+        if token[:value] == 'function'
+          advance # Skip 'function'
+
+          # Expect opening parenthesis
+          if current_token && current_token[:type] == :paren_open
+            # This is a function reference call
+            paren_token = advance # Skip '('
+
+            # Parse the function name as a string
+            func_name = nil
+            if current_token && current_token[:type] == :string
+              func_name = current_token[:value]
+              advance
+            else
+              @errors << {
+                message: "Expected string with function name in function() call",
+                position: @position,
+                line: current_token ? current_token[:line] : 0,
+                column: current_token ? current_token[:column] : 0
+              }
+            end
+
+            # Expect closing parenthesis
+            expect(:paren_close) # Skip ')'
+
+            return {
+              type: :function_reference,
+              function_name: func_name,
+              line: line,
+              column: column
+            }
+          else
+            # If not followed by parenthesis, it's likely a function declaration
+            @errors << {
+              message: "Unexpected keyword in expression: #{token[:value]}",
+              position: @position,
+              line: line,
+              column: column
+            }
+            advance
+            return nil
+          end
         # Legacy Vim allows certain keywords as identifiers in expressions
-        if ['return'].include?(token[:value])
+        elsif ['return'].include?(token[:value])
           # Handle 'return' keyword specially when it appears in an expression context
           advance
           @warnings << {
