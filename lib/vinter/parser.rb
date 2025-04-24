@@ -438,6 +438,33 @@ module Vinter
             column: current_token[:column]
           }
           advance
+
+          # Check for property access with dot notation (e.g., person.job)
+          if current_token && current_token[:type] == :operator && current_token[:value] == '.'
+            dot_token = advance # Skip '.'
+
+            # Next token should be an identifier (property name)
+            if current_token && current_token[:type] == :identifier
+              property_token = advance # Get the property name
+
+              # Update the target to be a property access
+              target = {
+                type: :property_access,
+                object: target,
+                property: property_token[:value],
+                line: dot_token[:line],
+                column: dot_token[:column]
+              }
+            else
+              @errors << {
+                message: "Expected property name after '.'",
+                position: @position,
+                line: current_token ? current_token[:line] : 0,
+                column: current_token ? current_token[:column] : 0
+              }
+            end
+          end
+
           # Check if this is an indexed access (dictionary key lookup)
           if current_token && current_token[:type] == :bracket_open
             bracket_token = advance # Skip '['
@@ -453,6 +480,14 @@ module Vinter
               column: bracket_token[:column]
             }
           end
+        when :register_access
+          target = {
+            type: :register_access,
+            register: current_token[:value],
+            line: current_token[:line],
+            column: current_token[:column]
+          }
+          advance
         when :bracket_open
           # Handle array destructuring like: let [key, value] = split(header, ': ')
           bracket_token = advance # Skip '['
@@ -1693,6 +1728,14 @@ module Vinter
         # Handle line continuation with backslash
         advance
         expr = parse_expression
+      when :register_access
+        advance
+        expr = {
+          type: :register_access,
+          register: token[:value][1..-1], # Remove the @ symbol
+          line: line,
+          column: column
+        }
       else
         @errors << {
           message: "Unexpected token in expression: #{token[:type]}",

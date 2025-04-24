@@ -11,6 +11,7 @@ module Vinter
       number: /\b(0[xX][0-9A-Fa-f]+|0[oO][0-7]+|0[bB][01]+|\d+(\.\d+)?([eE][+-]?\d+)?)\b/,
       # Handle both single and double quoted strings
       # string: /"(\\"|[^"])*"|'(\\'|[^'])*'/,
+      register_access: /@[a-zA-Z0-9":.%#=*+~_\/\-]/,
       # Vim9 comments use #
       comment: /(#|").*/,
       whitespace: /\s+/,
@@ -292,6 +293,20 @@ module Vinter
           }
           @column += match[0].length
           @position += match[0].length
+          next
+        end
+
+        # Handle register access (@a, @", etc.)
+        if chunk =~ /\A@[a-zA-Z0-9":.%#=*+~_\/\-]/
+          register_token = chunk.match(/\A@[a-zA-Z0-9":.%#=*+~_\/\-]/)[0]
+          @tokens << {
+            type: :register_access,
+            value: register_token,
+            line: @line_num,
+            column: @column
+          }
+          @column += register_token.length
+          @position += register_token.length
           next
         end
 

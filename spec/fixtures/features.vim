@@ -307,3 +307,164 @@ let unique_list = uniq(sort(copy([1, 2, 2, 3, 3, 4]))) " Get unique items [1, 2,
 let filtered = filter(copy(fruits), 'v:val =~# "^g"') " Filter items starting with 'g'
 let mapped = map(copy(fruits), 'toupper(v:val)') " Map to uppercase
 let reversed = reverse(copy(fruits)) " Reverse list
+
+" -----------------------------------------------------------------------------
+" 8. Working with Dictionaries
+" -----------------------------------------------------------------------------
+" Dictionary creation
+let person = {'name': 'John', 'age': 30, 'city': 'New York'}
+
+" Dictionary access
+let name = person['name']           " Using key in brackets
+let age = person.age                " Using dot notation
+let maybe_job = get(person, 'job', 'unemployed') " Get with default if key doesn't exist
+
+" Dictionary modification
+let person.job = 'Developer'        " Add/modify using dot notation
+let person['salary'] = 100000       " Add/modify using brackets
+call remove(person, 'city')         " Remove a key-value pair
+call extend(person, {'married': v:true}) " Extend dictionary
+
+" Dictionary iteration
+for key in keys(person)
+  echo "Key: " . key . ", Value: " . person[key]
+endfor
+
+for [key, value] in items(person)
+  echo "Key: " . key . ", Value: " . value
+endfor
+
+" Dictionary functions
+let dict_keys = keys(person)        " Get list of keys
+let dict_values = values(person)    " Get list of values
+let dict_items = items(person)      " Get list of [key, value] pairs
+let has_key_result = has_key(person, 'age') " Check if key exists
+let dict_size = len(person)         " Number of items
+let filtered_dict = filter(copy(person), 'type(v:val) == type("")') " Filter string values
+let mapped_dict = map(copy(person), 'type(v:val) == type("") ? toupper(v:val) : v:val') " Map string values to uppercase
+
+" -----------------------------------------------------------------------------
+" 9. String Operations
+" -----------------------------------------------------------------------------
+" String creation
+let str = "Hello, Vim script!"
+
+" String access
+let first_char = str[0]             " First character (H)
+let substring = str[7:10]           " Substring "Vim"
+
+" String functions
+let str_len = strlen(str)           " String length
+let str_lower = tolower(str)        " Lowercase
+let str_upper = toupper(str)        " Uppercase
+let str_words = split(str, " ")     " Split into list of words
+let str_join = join(['Hello', 'Vim', 'script'], ' ') " Join list into string
+let str_replace = substitute(str, 'Vim', 'VimL', 'g') " Replace text
+let str_match = match(str, 'Vim')   " Find position of substring (7)
+let str_chars = split(str, '\zs')   " Split into list of characters
+let trim_str = trim("  Hello  ")    " Trim whitespace (Vim 8.0+)
+let str_fmt = printf("%s has %d characters", str, strlen(str)) " Formatted string
+
+" Regular expressions
+let matches = matchlist(str, '\v(\w+), (\w+)')  " Find captures: ['Hello, Vim', 'Hello', 'Vim']
+let str_subst = substitute(str, '\v(\w+)', '\=toupper(submatch(1))', '') " Replace using expression
+
+" -----------------------------------------------------------------------------
+" 10. File Operations
+" -----------------------------------------------------------------------------
+" Reading and writing files
+let lines = readfile('input.txt')                      " Read file into list of lines
+call writefile(['Line 1', 'Line 2'], 'output.txt')     " Write list to file
+let file_exists = filereadable('input.txt')            " Check if file exists
+let is_writable = filewritable('output.txt')           " Check if file is writable
+let file_size = getfsize('input.txt')                  " Get file size
+let file_time = getftime('input.txt')                  " Get last modification time
+let file_type = getftype('input.txt')                  " Get file type
+let files = glob('*.txt')                              " Get matching files
+let expanded = expand('%:p')                           " Current file full path
+let dirname = fnamemodify('path/to/file.txt', ':h')    " Get directory name
+let filename = fnamemodify('path/to/file.txt', ':t')   " Get file name
+let noext = fnamemodify('path/to/file.txt', ':r')      " Remove extension
+
+" -----------------------------------------------------------------------------
+" 11. Buffer Operations
+" -----------------------------------------------------------------------------
+" Buffer manipulation
+let buf_list = getbufinfo()                            " Get info for all buffers
+let cur_buf = bufnr('%')                               " Current buffer number
+let buf_count = bufnr('$')                             " Highest buffer number
+let is_loaded = bufloaded('file.txt')                  " Check if buffer is loaded
+let buf_name = bufname(1)                              " Get name of buffer 1
+let buf_exists = bufexists(2)                          " Check if buffer 2 exists
+let modified = getbufvar(1, '&modified')               " Get buffer option
+
+" -----------------------------------------------------------------------------
+" 12. Window Operations
+" -----------------------------------------------------------------------------
+" Window information
+let win_count = winnr('$')                             " Number of windows
+let cur_win = winnr()                                  " Current window number
+let win_id = win_getid()                               " Get window ID
+let win_info = getwininfo()                            " Get info for all windows
+let buf_in_win = winbufnr(1)                           " Buffer in window 1
+let win_height = winheight(0)                          " Height of current window
+let win_width = winwidth(0)                            " Width of current window
+
+" -----------------------------------------------------------------------------
+" 13. Tab Operations
+" -----------------------------------------------------------------------------
+" Tab information
+let tab_count = tabpagenr('$')                         " Number of tabs
+let cur_tab = tabpagenr()                              " Current tab number
+let tab_info = gettabinfo()                            " Get info for all tabs
+
+" -----------------------------------------------------------------------------
+" 14. Option Handling
+" -----------------------------------------------------------------------------
+" Get and set options
+let opt_value = &tabstop                               " Get option value
+let &shiftwidth = 4                                    " Set option value
+let old_opt = &textwidth                               " Save option value
+let &textwidth = 80                                    " Change option
+set number                                             " Set boolean option
+set nonumber                                           " Unset boolean option
+let is_set = &number                                   " Get boolean option
+let local_opt = &l:indentexpr                          " Get local option
+let global_opt = &g:undolevels                         " Get global option
+
+" -----------------------------------------------------------------------------
+" 15. Register Operations
+" -----------------------------------------------------------------------------
+" Register manipulation
+let reg_value = @a                                     " Get register 'a' content
+let @b = "New content"                                 " Set register 'b' content
+let clipboard = @+                                     " Get clipboard content (if available)
+let search_pat = @/                                    " Get search pattern register
+let reg_types = getregtype('a')                        " Get register type
+call setreg('c', 'Content', 'v')                       " Set register with type
+
+" -----------------------------------------------------------------------------
+" 16. Cursor and Screen Functions
+" -----------------------------------------------------------------------------
+" Cursor position
+let cursor_pos = getcurpos()                           " Get cursor position [bufnum, lnum, col, off, curswant]
+let line_num = line('.')                               " Current line number
+let col_num = col('.')                                 " Current column number
+let cursor_byte = line2byte(line('.')) + col('.') - 1  " Byte position of cursor
+let screen_row = winline()                             " Screen row of cursor
+let screen_col = wincol()                              " Screen column of cursor
+
+" Screen information
+let screen_rows = &lines                               " Number of screen rows
+let screen_cols = &columns                             " Number of screen columns
+
+" -----------------------------------------------------------------------------
+" 17. Text Manipulation
+" -----------------------------------------------------------------------------
+" Line operations
+let cur_line = getline('.')                            " Get current line
+call setline('.', 'New text')                          " Set current line
+call append('.', 'Add after current')                  " Append after current line
+call append(0, 'Add to top')                           " Add to top of buffer
+let line_count = line('$')                             " Number of lines in buffer
+call deletebufline('%', 5)                             " Delete line 5 (Vim 8.1+)
