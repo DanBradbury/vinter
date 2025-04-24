@@ -8,7 +8,7 @@ module Vinter
       # Single-character operators
       operator: /[\+\-\*\/=<>!&\|\.]/,
       # Multi-character operators handled separately
-      number: /\b\d+(\.\d+)?\b/,
+      number: /\b(0[xX][0-9A-Fa-f]+|0[oO][0-7]+|0[bB][01]+|\d+(\.\d+)?([eE][+-]?\d+)?)\b/,
       # Handle both single and double quoted strings
       # string: /"(\\"|[^"])*"|'(\\'|[^'])*'/,
       # Vim9 comments use #

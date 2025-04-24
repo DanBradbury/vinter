@@ -27,3 +27,11 @@ let t:tab_var = "Only in current tab"              " Tab-local
 let l:local_var = "Only in current function/block" " Local to function
 let a:arg = "Defined in function arguments"        " Function argument (only in functions)
 let v:count = v:count                              " Vim special variable
+
+" 2.2 Data Types
+" Numbers
+let num_dec = 42       " Decimal
+let num_hex = 0xFF     " Hexadecimal (255)
+let num_oct = 0o77     " Octal (63)
+let num_bin = 0b1010   " Binary (10)
+let num_float = 3.14   " Float
