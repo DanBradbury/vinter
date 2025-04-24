@@ -2,7 +2,7 @@ module Vinter
   class Lexer
     TOKEN_TYPES = {
       # Vim9 specific keywords
-      keyword: /\b(if|else|elseif|endif|while|endwhile|for|endfor|def|enddef|function|endfunction|endfunc|return|const|var|final|import|export|class|extends|static|enum|type|vim9script|abort|autocmd|echoerr|echohl|echomsg|let|execute|continue|break|try|catch|finally|endtry|throw|runtime|silent|delete)\b/,
+      keyword: /\b(if|else|elseif|endif|while|endwhile|for|endfor|def|enddef|function|endfunction|endfunc|return|const|var|final|import|export|class|extends|static|enum|type|vim9script|abort|autocmd|echom|echoerr|echohl|echomsg|let|execute|continue|break|try|catch|finally|endtry|throw|runtime|silent|delete)\b/,
       # Identifiers can include # and special characters
       identifier: /\b[a-zA-Z_][a-zA-Z0-9_#]*\b/,
       # Single-character operators
@@ -155,6 +155,32 @@ module Vinter
         if match = chunk.match(/\As:[a-zA-Z_][a-zA-Z0-9_]*/)
           @tokens << {
             type: :script_local,
+            value: match[0],
+            line: @line_num,
+            column: @column
+          }
+          @column += match[0].length
+          @position += match[0].length
+          next
+        end
+
+        # Handle buffer-local identifiers with b: prefix
+        if match = chunk.match(/\Ab:[a-zA-Z_][a-zA-Z0-9_]*/)
+          @tokens << {
+            type: :buffer_local,
+            value: match[0],
+            line: @line_num,
+            column: @column
+          }
+          @column += match[0].length
+          @position += match[0].length
+          next
+        end
+
+        # Handle window-local identifiers with w: prefix
+        if match = chunk.match(/\Aw:[a-zA-Z_][a-zA-Z0-9_]*/)
+          @tokens << {
+            type: :window_local,
             value: match[0],
             line: @line_num,
             column: @column

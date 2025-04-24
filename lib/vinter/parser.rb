@@ -430,7 +430,7 @@ module Vinter
       target = nil
       if current_token
         case current_token[:type]
-        when :identifier, :global_variable, :script_local, :arg_variable, :option_variable, :special_variable, :local_variable
+        when :identifier, :global_variable, :script_local, :buffer_local, :window_local, :arg_variable, :option_variable, :special_variable, :local_variable
           target = {
             type: current_token[:type],
             name: current_token[:value],
