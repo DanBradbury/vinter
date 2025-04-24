@@ -272,3 +272,38 @@ call HelloWorld()                " Call with no return value
 let result = Add(10, 20)         " Call with return value
 let str_len = Funcref("Vim")     " Call through a funcref
 let uppercase = Capitalize("vim")  " Call a lambda function
+
+" -----------------------------------------------------------------------------
+" 7. Working with Lists
+" -----------------------------------------------------------------------------
+" List creation
+let fruits = ['apple', 'banana', 'cherry']
+
+" List access
+let first_fruit = fruits[0]          " First item (apple)
+let last_fruit = fruits[-1]          " Last item (cherry)
+
+" List slicing
+let two_fruits = fruits[0:1]         " First two items ['apple', 'banana']
+
+" List manipulation
+call add(fruits, 'date')             " Add item to end ['apple', 'banana', 'cherry', 'date']
+call insert(fruits, 'apricot', 1)    " Insert at index 1 ['apple', 'apricot', 'banana', 'cherry', 'date']
+call remove(fruits, 2)               " Remove item at index 2 ['apple', 'apricot', 'cherry', 'date']
+let extracted = remove(fruits, 0, 1) " Remove range and return it ['apple', 'apricot']
+call extend(fruits, ['fig', 'grape']) " Extend list ['cherry', 'date', 'fig', 'grape']
+
+" List iteration
+for fruit in fruits
+  echo "Fruit: " . fruit
+endfor
+
+" List functions
+let fruit_count = len(fruits)        " Length of list
+let sorted_fruits = sort(copy(fruits)) " Sort (copy to avoid changing original)
+let fruit_index = index(fruits, 'fig') " Find index of item
+let fruit_joined = join(fruits, ', ') " Join list into string
+let unique_list = uniq(sort(copy([1, 2, 2, 3, 3, 4]))) " Get unique items [1, 2, 3, 4]
+let filtered = filter(copy(fruits), 'v:val =~# "^g"') " Filter items starting with 'g'
+let mapped = map(copy(fruits), 'toupper(v:val)') " Map to uppercase
+let reversed = reverse(copy(fruits)) " Reverse list

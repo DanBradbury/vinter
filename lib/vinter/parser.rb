@@ -1788,18 +1788,37 @@ module Vinter
         # Check for indexing with brackets
         elsif current_token[:type] == :bracket_open
           bracket_token = advance # Skip '['
-
           index_expr = parse_expression
+
+          # Add support for list slicing with colon
+          end_index = nil
+          if current_token && current_token[:type] == :colon
+            advance # Skip ':'
+            end_index = parse_expression
+          end
 
           expect(:bracket_close) # Skip ']'
 
-          expr = {
-            type: :indexed_access,
-            object: expr,
-            index: index_expr,
-            line: bracket_token[:line],
-            column: bracket_token[:column]
-          }
+          if end_index
+            # This is a slice operation
+            expr = {
+              type: :slice_access,
+              object: expr,
+              start_index: index_expr,
+              end_index: end_index,
+              line: bracket_token[:line],
+              column: bracket_token[:column]
+            }
+          else
+            # Regular indexed access
+            expr = {
+              type: :indexed_access,
+              object: expr,
+              index: index_expr,
+              line: bracket_token[:line],
+              column: bracket_token[:column]
+            }
+          end
         # Check for function call directly on an expression
         elsif current_token[:type] == :paren_open
           paren_token = advance # Skip '('
