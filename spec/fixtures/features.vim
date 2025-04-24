@@ -23,3 +23,7 @@ let g:global_var = "Available everywhere"          " Global
 let s:script_var = "Only in this script"           " Script-local
 let b:buffer_var = "Only in current buffer"        " Buffer-local
 let w:window_var = "Only in current window"        " Window-local
+let t:tab_var = "Only in current tab"              " Tab-local
+let l:local_var = "Only in current function/block" " Local to function
+let a:arg = "Defined in function arguments"        " Function argument (only in functions)
+let v:count = v:count                              " Vim special variable

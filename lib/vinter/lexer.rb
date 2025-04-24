@@ -189,6 +189,20 @@ module Vinter
           @position += match[0].length
           next
         end
+
+        # Handle tab-local identifiers with t: prefix
+        if match = chunk.match(/\At:[a-zA-Z_][a-zA-Z0-9_]*/)
+          @tokens << {
+            type: :tab_local,
+            value: match[0],
+            line: @line_num,
+            column: @column
+          }
+          @column += match[0].length
+          @position += match[0].length
+          next
+        end
+
         
         # Handle global variables with g: prefix
         if match = chunk.match(/\Ag:[a-zA-Z_][a-zA-Z0-9_]*/)
