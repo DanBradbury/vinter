@@ -43,7 +43,7 @@ module Vinter
         found = current_token ? current_token[:type] : "end of input"
         line = current_token ? current_token[:line] : 0
         column = current_token ? current_token[:column] : 0
-        
+
         # Get the full line content from the input if available
         line_content = nil
         if line > 0 && @tokens.length > 0
@@ -55,15 +55,15 @@ module Vinter
             line_content = "Line content: #{line_representation}"
           end
         end
-        
+
         error = "Expected #{expected} but found #{found}"
         error += ", at line #{line}, column #{column}"
         error += "\n#{line_content}" if line_content
-        
-        @errors << { 
-          message: error, 
-          position: @position, 
-          line: line, 
+
+        @errors << {
+          message: error,
+          position: @position,
+          line: line,
           column: column,
           line_content: line_content
         }
@@ -125,7 +125,7 @@ module Vinter
         when 'execute'
           parse_execute_statement
         when 'let'
-          parse_let_statement  
+          parse_let_statement
         when 'echohl', 'echomsg', 'echoerr'
           parse_echo_statement
         when 'augroup'
@@ -185,10 +185,10 @@ module Vinter
       token = advance # Skip 'silent!'
       line = token[:line]
       column = token[:column]
-      
+
       # Parse the command that follows silent!
       command = parse_statement
-      
+
       {
         type: :silent_command,
         command: command,
@@ -201,14 +201,14 @@ module Vinter
       token = advance # Skip 'delete'
       line = token[:line]
       column = token[:column]
-      
+
       # Check for register argument
       register = nil
       if current_token && current_token[:type] == :underscore
         register = current_token[:value]
         advance
       end
-      
+
       {
         type: :delete_command,
         register: register,
@@ -216,15 +216,15 @@ module Vinter
         column: column
       }
     end
-    
+
     def parse_range_command
       token = advance # Skip '%'
       line = token[:line]
       column = token[:column]
-      
+
       # Parse the command that follows the range
       command = parse_statement
-      
+
       {
         type: :range_command,
         range: '%',
@@ -238,25 +238,25 @@ module Vinter
       token = advance # Skip 'runtime' or 'runtime!'
       line = token[:line]
       column = token[:column]
-      
-      is_bang = token[:type] == :runtime_command || 
+
+      is_bang = token[:type] == :runtime_command ||
                (token[:value] == 'runtime' && current_token && current_token[:type] == :operator && current_token[:value] == '!')
-      
+
       # Skip the '!' if it's separate token
       if token[:type] != :runtime_command && is_bang
         advance # Skip '!'
       end
-      
+
       # Collect the pattern argument
       pattern_parts = []
-      while @position < @tokens.length && 
+      while @position < @tokens.length &&
             !(current_token[:type] == :keyword || current_token[:value] == "\n")
         pattern_parts << current_token[:value]
         advance
       end
-      
+
       pattern = pattern_parts.join('').strip
-      
+
       {
         type: :runtime_statement,
         bang: is_bang,
@@ -270,33 +270,33 @@ module Vinter
       token = advance # Skip 'filter' or 'filt'
       line = token[:line]
       column = token[:column]
-      
+
       # Check for bang (!)
       has_bang = false
       if current_token && current_token[:type] == :operator && current_token[:value] == '!'
         has_bang = true
         advance # Skip '!'
       end
-      
+
       # Parse the pattern
       pattern = nil
       pattern_delimiter = nil
-      
+
       if current_token && current_token[:type] == :operator && current_token[:value] == '/'
         # Handle /pattern/ form
         pattern_delimiter = '/'
         advance # Skip opening delimiter
-        
+
         # Collect all tokens until closing delimiter
         pattern_parts = []
-        while @position < @tokens.length && 
+        while @position < @tokens.length &&
               !(current_token[:type] == :operator && current_token[:value] == pattern_delimiter)
           pattern_parts << current_token[:value]
           advance
         end
-        
+
         pattern = pattern_parts.join('')
-        
+
         # Skip closing delimiter
         if current_token && current_token[:type] == :operator && current_token[:value] == pattern_delimiter
           advance
@@ -314,23 +314,23 @@ module Vinter
         pattern_parts = []
         while @position < @tokens.length
           # Don't consume tokens that likely belong to the command part
-          if current_token[:type] == :keyword || 
-             (current_token[:type] == :identifier && 
+          if current_token[:type] == :keyword ||
+             (current_token[:type] == :identifier &&
               ['echo', 'let', 'execute', 'autocmd', 'au', 'oldfiles', 'clist', 'command',
                'files', 'highlight', 'jumps', 'list', 'llist', 'marks', 'registers', 'set'].include?(current_token[:value]))
             break
           end
-          
+
           pattern_parts << current_token[:value]
           advance
         end
-        
+
         pattern = pattern_parts.join('').strip
       end
-      
+
       # Parse the command to be filtered
       command = parse_statement
-      
+
       {
         type: :filter_command,
         pattern: pattern,
@@ -345,7 +345,7 @@ module Vinter
       token = advance # Skip 'augroup'
       line = token[:line]
       column = token[:column]
-      
+
       # Get the augroup name
       name = nil
       if current_token && current_token[:type] == :identifier
@@ -359,7 +359,7 @@ module Vinter
           column: current_token ? current_token[:column] : 0
         }
       end
-      
+
       # Check for augroup END
       is_end_marker = false
       if name && (name.upcase == "END" || name == "END")
@@ -370,16 +370,16 @@ module Vinter
           column: column
         }
       end
-      
+
       # Parse statements within the augroup until we find 'augroup END'
       body = []
       while @position < @tokens.length
         # Check for 'augroup END'
-        if (current_token[:type] == :keyword && current_token[:value] == 'augroup') || 
+        if (current_token[:type] == :keyword && current_token[:value] == 'augroup') ||
            (current_token[:type] == :identifier && current_token[:value] == 'augroup')
           # Look ahead for END
-          if peek_token && 
-             ((peek_token[:type] == :identifier && 
+          if peek_token &&
+             ((peek_token[:type] == :identifier &&
                (peek_token[:value].upcase == 'END' || peek_token[:value] == 'END')) ||
               (peek_token[:type] == :keyword && peek_token[:value].upcase == 'END'))
             advance # Skip 'augroup'
@@ -387,11 +387,11 @@ module Vinter
             break
           end
         end
-        
+
         stmt = parse_statement
         body << stmt if stmt
       end
-      
+
       {
         type: :augroup_statement,
         name: name,
@@ -456,10 +456,10 @@ module Vinter
         when :bracket_open
           # Handle array destructuring like: let [key, value] = split(header, ': ')
           bracket_token = advance # Skip '['
-          
+
           # Parse the variable names inside the brackets
           destructuring_targets = []
-          
+
           # Parse comma-separated list of variables
           while current_token && current_token[:type] != :bracket_close
             # Skip commas between variables
@@ -467,7 +467,7 @@ module Vinter
               advance
               next
             end
-            
+
             # Parse the variable name
             if current_token && (
               current_token[:type] == :identifier ||
@@ -498,9 +498,9 @@ module Vinter
               end
             end
           end
-          
+
           expect(:bracket_close) # Skip ']'
-          
+
           target = {
             type: :destructuring_assignment,
             targets: destructuring_targets,
@@ -550,7 +550,7 @@ module Vinter
       token = advance # Skip 'autocmd'
       line = token[:line]
       column = token[:column]
-    
+
       # Parse event name (like BufNewFile or VimEnter)
       event = nil
       if current_token && current_token[:type] == :identifier
@@ -563,26 +563,26 @@ module Vinter
           column: current_token ? current_token[:column] : 0
         }
       end
-    
+
       # Parse pattern (like *.match or *)
       pattern = nil
       if current_token
         pattern = current_token[:value]
         advance
       end
-    
+
       # Parse everything after as the command - collect as raw tokens
       command_parts = []
       while @position < @tokens.length
-        if !current_token || current_token[:type] == :comment || 
+        if !current_token || current_token[:type] == :comment ||
            (current_token[:value] == "\n" && !current_token[:value].start_with?("\\"))
           break
         end
-        
+
         command_parts << current_token
         advance
       end
-    
+
       return {
         type: :autocmd_statement,
         event: event,
@@ -623,17 +623,17 @@ module Vinter
         # Split the comment at the newline
         parts = comment.split("\n", 2)
         comment = parts[0] # Only use the part before newline
-        
+
         # Create a new token for the content after the newline
         remainder = parts[1].strip
-        
+
         if !remainder.empty?
           # Position correctly - we'll advance past the current token
           # But should process the remainder separately later
-          
+
           # For debugging only, you can print what's being processed
           # puts "Found comment with newline. Using: '#{comment}', Remainder: '#{remainder}'"
-          
+
           # Don't call advance() - we'll modify the current token instead
           @tokens[@position] = {
             type: :string,  # Keep original type
@@ -641,7 +641,7 @@ module Vinter
             line: line,
             column: column
           }
-          
+
           # Insert the remainder as a new token after the current one
           @tokens.insert(@position + 1, {
             type: :comment,  # Same type for consistency
@@ -652,7 +652,7 @@ module Vinter
         end
       end
       # binding.pry
-    
+
       # Now advance past the (potentially modified) current token
       advance
       { type: :comment, value: comment, line: line, column: column }
@@ -662,12 +662,12 @@ module Vinter
       token = advance # Skip 'if'
       line = token[:line]
       column = token[:column]
-    
+
       condition = parse_expression
-    
+
       then_branch = []
       else_branch = []
-    
+
       # Parse statements until we hit 'else', 'elseif', or 'endif'
       while @position < @tokens.length
         # Check for the tokens that would terminate this block
@@ -675,34 +675,34 @@ module Vinter
            ['else', 'elseif', 'endif'].include?(current_token[:value])
           break
         end
-    
+
         # Before parsing a statement, save our position in case we need to backtrack
         old_position = @position
         old_errors_count = @errors.length
-        
+
         stmt = parse_statement
-        
+
         # If parsing the statement added errors, there might be a mismatch or confusion
         # between Vim control structures. Check for specific issues.
         if @errors.length > old_errors_count
           last_error = @errors.last
-          
+
           # If we expected 'endif' but didn't find it, we might be inside a nested control
           # structure that was correctly closed but not recognized
           if last_error[:message].include?("Expected 'endif'")
             # Revert to before the statement and try to find the actual endif
             @position = old_position
             @errors.pop # Remove the error we're handling
-            
+
             # Skip ahead to find an endif, else, or elseif
             while @position < @tokens.length
-              if current_token[:type] == :keyword && 
+              if current_token[:type] == :keyword &&
                  ['endif', 'else', 'elseif'].include?(current_token[:value])
                 break
               end
               advance
             end
-            
+
             # If we found one of our terminating keywords, break out
             if current_token && current_token[:type] == :keyword &&
                ['else', 'elseif', 'endif'].include?(current_token[:value])
@@ -717,25 +717,25 @@ module Vinter
           then_branch << stmt if stmt
         end
       end
-    
+
       # Check for else/elseif
       if current_token && current_token[:type] == :keyword
         if current_token[:value] == 'else'
           advance # Skip 'else'
-    
+
           # Parse statements until 'endif'
           while @position < @tokens.length
             if current_token[:type] == :keyword && current_token[:value] == 'endif'
               break
             end
-    
+
             stmt = parse_statement
             else_branch << stmt if stmt
           end
         elsif current_token[:value] == 'elseif'
           elseif_stmt = parse_if_statement
           else_branch << elseif_stmt if elseif_stmt
-    
+
           return {
             type: :if_statement,
             condition: condition,
@@ -746,7 +746,7 @@ module Vinter
           }
         end
       end
-      
+
       # Expect endif
       if current_token && current_token[:type] == :keyword && current_token[:value] == 'endif'
         advance # Skip 'endif'
@@ -761,7 +761,7 @@ module Vinter
           }
         end
       end
-    
+
       {
         type: :if_statement,
         condition: condition,
@@ -1146,10 +1146,10 @@ module Vinter
 
       value = nil
       # Check if we've reached the end of the file, end of line, or a semicolon
-      if @position < @tokens.length && 
-         current_token && 
+      if @position < @tokens.length &&
+         current_token &&
          current_token[:type] != :semicolon &&
-         !(current_token[:type] == :keyword && 
+         !(current_token[:type] == :keyword &&
            ['endif', 'endwhile', 'endfor', 'endfunction', 'endfunc'].include?(current_token[:value]))
         value = parse_expression
       end
@@ -1208,28 +1208,28 @@ module Vinter
     def parse_expression
       # binding.pry
       # Special case for empty return statements or standalone keywords that shouldn't be expressions
-      if current_token && current_token[:type] == :keyword && 
+      if current_token && current_token[:type] == :keyword &&
          ['return', 'endif', 'endwhile', 'endfor', 'endfunction', 'endfunc'].include?(current_token[:value])
         return nil
       end
 
       # Parse the condition expression
       expr = parse_binary_expression
-      
+
       # Check if this is a ternary expression
       if current_token && current_token[:type] == :operator && current_token[:value] == '?'
         question_token = advance # Skip '?'
-        
+
         # Parse the "then" expression
         then_expr = parse_expression
-        
+
         # Expect the colon
         if current_token && current_token[:type] == :colon
           colon_token = advance # Skip ':'
-          
+
           # Parse the "else" expression
           else_expr = parse_expression
-          
+
           # Return the ternary expression
           return {
             type: :ternary_expression,
@@ -1248,7 +1248,7 @@ module Vinter
           }
         end
       end
-      
+
       return expr
     end
 
@@ -1264,13 +1264,13 @@ module Vinter
         if current_token[:type] == :whitespace
           advance
         end
-        
+
         if current_token && current_token[:type] == :operator && current_token[:value] == '.' &&
           operator_precedence(current_token[:value]) >= precedence
-         
+
          op_token = advance # Skip the operator
          right = parse_binary_expression(operator_precedence('.') + 1)
-         
+
          left = {
            type: :binary_expression,
            operator: '.',
@@ -1282,7 +1282,7 @@ module Vinter
         elsif current_token && current_token[:type] == :operator &&
           ['<', '>', '=', '!'].include?(current_token[:value]) &&
           peek_token && peek_token[:type] == :operator && peek_token[:value] == '='
-         
+
           # Combine the two operators into one token
           op_token = current_token
           op = current_token[:value] + peek_token[:value]
@@ -1294,7 +1294,7 @@ module Vinter
 
           if op_precedence >= precedence
             right = parse_binary_expression(op_precedence + 1)
-            
+
             left = {
               type: :binary_expression,
               operator: op,
@@ -1486,14 +1486,14 @@ module Vinter
         if ['has', 'exists', 'empty', 'filter', 'get'].include?(token[:value])
           return parse_builtin_function_call(token[:value], line, column)
         end
-    
+
         advance
 
         # Check if this is a function call
         if current_token && current_token[:type] == :paren_open
           return parse_function_call(token[:value], line, column)
         end
-        
+
         # Special handling for execute command
         if token[:value] == 'execute'
           # Parse the string expressions for execute
@@ -1552,13 +1552,13 @@ module Vinter
         # Check for property access with dot
         if current_token[:type] == :operator && current_token[:value] == '.'
           # Check if this is a property access (only when left side is an identifier or object)
-          if expr[:type] == :identifier || expr[:type] == :global_variable || 
+          if expr[:type] == :identifier || expr[:type] == :global_variable ||
             expr[:type] == :script_local || expr[:type] == :namespace_prefix
 
             dot_token = advance # Skip '.'
             # Next token should be an identifier (property name)
-            if !current_token || (current_token[:type] != :identifier && 
-              current_token[:type] != :arg_variable && 
+            if !current_token || (current_token[:type] != :identifier &&
+              current_token[:type] != :arg_variable &&
               current_token[:type] != :string)
                 @errors << {
                   message: "Expected property name after '.'",
@@ -1580,7 +1580,7 @@ module Vinter
           else
             break
           end
-  
+
         # Check for method call with arrow ->
         elsif current_token[:type] == :operator && current_token[:value] == '->'
           arrow_token = advance # Skip '->'
@@ -1684,14 +1684,14 @@ module Vinter
     def parse_builtin_function_call(name, line, column)
       # Skip the function name (already consumed)
       advance if current_token[:value] == name
-      
+
       # Check if there's an opening parenthesis
       if current_token && current_token[:type] == :paren_open
         advance # Skip '('
-        
+
         # Parse arguments
         args = []
-        
+
         # Parse until closing parenthesis
         while @position < @tokens.length && current_token && current_token[:type] != :paren_close
           # Skip whitespace or comments
@@ -1699,10 +1699,10 @@ module Vinter
             advance
             next
           end
-          
+
           arg = parse_expression
           args << arg if arg
-          
+
           if current_token && current_token[:type] == :comma
             advance
           elsif current_token && current_token[:type] != :paren_close
@@ -1715,7 +1715,7 @@ module Vinter
             break
           end
         end
-        
+
         # Check for closing parenthesis
         if current_token && current_token[:type] == :paren_close
           advance # Skip ')'
@@ -1732,7 +1732,7 @@ module Vinter
         # Just parse one expression as the argument
         args = [parse_expression]
       end
-      
+
       # Return function call node
       {
         type: :builtin_function_call,
@@ -2085,9 +2085,9 @@ module Vinter
 
     def parse_function_call(name, line, column)
       expect(:paren_open)
-      
+
       args = []
-      
+
       # Parse arguments until we find a closing parenthesis
       while @position < @tokens.length && current_token && current_token[:type] != :paren_close
         # Skip comments inside parameter lists
@@ -2095,21 +2095,21 @@ module Vinter
           advance
           next
         end
-        
+
         # Parse the argument
         arg = parse_expression
         args << arg if arg
-        
+
         # Break if we hit the closing paren
         if current_token && current_token[:type] == :paren_close
           break
         end
-        
+
         # If we're not at a comma or closing parenthesis, look ahead to find the next one
-        if current_token && 
-           current_token[:type] != :comma && 
+        if current_token &&
+           current_token[:type] != :comma &&
            current_token[:type] != :paren_close
-          
+
           # Look ahead to see if there's a comma or closing parenthesis coming up
           look_ahead_pos = @position
           while look_ahead_pos < @tokens.length
@@ -2117,21 +2117,21 @@ module Vinter
             break if !next_token || next_token[:type] == :comma || next_token[:type] == :paren_close
             look_ahead_pos += 1
           end
-          
+
           # If we found a comma ahead, advance to it
           if look_ahead_pos < @tokens.length && @tokens[look_ahead_pos][:type] == :comma
             @position = look_ahead_pos
             advance  # Skip the comma
             next
           end
-          
+
           # Otherwise advance to closing parenthesis if found
           if look_ahead_pos < @tokens.length && @tokens[look_ahead_pos][:type] == :paren_close
             @position = look_ahead_pos
             next
           end
         end
-        
+
         # If we have a comma, advance past it and continue
         if current_token && current_token[:type] == :comma
           advance
@@ -2146,9 +2146,9 @@ module Vinter
           break
         end
       end
-      
+
       expect(:paren_close)
-      
+
       {
         type: :function_call,
         name: name,
@@ -2310,7 +2310,7 @@ module Vinter
       # For script-local functions or other scoped functions
       is_script_local = false
       function_scope = nil
-      
+
       # Check if we have a script-local function (s:)
       if current_token && current_token[:type] == :script_local
         is_script_local = true
@@ -2324,7 +2324,7 @@ module Vinter
           advance
         end
       end
-      
+
       # Now handle the function name, which might be separate from the scope
       name = nil
       if !is_script_local && function_scope.nil? && current_token && current_token[:type] == :identifier
@@ -2349,7 +2349,7 @@ module Vinter
       while current_token
         if current_token[:type] == :keyword && current_token[:value] == 'abort'
           attributes << advance[:value]
-        elsif current_token[:type] == :identifier && 
+        elsif current_token[:type] == :identifier &&
               ['range', 'dict', 'closure'].include?(current_token[:value])
           attributes << advance[:value]
         else
@@ -2385,7 +2385,7 @@ module Vinter
       if function_scope
         function_name = function_scope + function_name if function_name
       end
-      
+
       {
         type: :legacy_function,
         name: function_name,
@@ -2403,52 +2403,52 @@ module Vinter
     # Legacy function parameters are different - they can use a:name syntax
     def parse_parameter_list_legacy
       params = []
-      
+
       # Empty parameter list
       if current_token && current_token[:type] == :paren_close
         return params
       end
-      
+
       # Handle special case: varargs at the start of the parameter list
       if current_token && (
-        (current_token[:type] == :ellipsis) || 
+        (current_token[:type] == :ellipsis) ||
         (current_token[:type] == :operator && current_token[:value] == '.')
       )
         if current_token[:type] == :ellipsis
           token = advance
-          params << { 
-            type: :var_args_legacy, 
-            name: '...', 
-            line: token[:line], 
-            column: token[:column] 
+          params << {
+            type: :var_args_legacy,
+            name: '...',
+            line: token[:line],
+            column: token[:column]
           }
           return params
-        else 
+        else
           # Count consecutive dots
           dot_count = 0
           first_dot_token = current_token
-          
+
           # Store the line and column before we advance
           dot_line = first_dot_token[:line]
           dot_column = first_dot_token[:column]
-          
+
           while current_token && current_token[:type] == :operator && current_token[:value] == '.'
             dot_count += 1
             advance
           end
-          
+
           if dot_count == 3
-            params << { 
-              type: :var_args_legacy, 
-              name: '...', 
-              line: dot_line, 
-              column: dot_column 
+            params << {
+              type: :var_args_legacy,
+              name: '...',
+              line: dot_line,
+              column: dot_column
             }
             return params
           end
         end
       end
-      
+
       # Regular parameter parsing (existing logic)
       loop do
         if current_token && current_token[:type] == :identifier
@@ -2472,44 +2472,44 @@ module Vinter
         else
           # We might be at varargs after other parameters
           if current_token && (
-            (current_token[:type] == :ellipsis) || 
+            (current_token[:type] == :ellipsis) ||
             (current_token[:type] == :operator && current_token[:value] == '.')
           )
             # Add debug
             puts "Found potential varargs token: #{current_token[:type]} #{current_token[:value]}"
-            
+
             if current_token[:type] == :ellipsis
               token = current_token  # STORE the token before advancing
               advance
-              params << { 
-                type: :var_args_legacy, 
-                name: '...', 
+              params << {
+                type: :var_args_legacy,
+                name: '...',
                 line: token[:line],   # Use stored token
-                column: token[:column] 
+                column: token[:column]
               }
             else
               dot_count = 0
               first_dot_token = current_token
-              
+
               # Store line/column BEFORE advancing
               dot_line = first_dot_token[:line]
               dot_column = first_dot_token[:column]
-              
+
               puts "Starting dot sequence at line #{dot_line}, column #{dot_column}"
-              
+
               while current_token && current_token[:type] == :operator && current_token[:value] == '.'
                 dot_count += 1
                 puts "Found dot #{dot_count}"
                 advance
               end
-              
+
               if dot_count == 3
                 puts "Complete varargs found (3 dots)"
-                params << { 
-                  type: :var_args_legacy, 
-                  name: '...', 
+                params << {
+                  type: :var_args_legacy,
+                  name: '...',
                   line: dot_line,     # Use stored values
-                  column: dot_column 
+                  column: dot_column
                 }
               else
                 puts "Incomplete varargs: only #{dot_count} dots found"
@@ -2519,7 +2519,7 @@ module Vinter
           else
             # Add debug to see what unexpected token we're encountering
             puts "Unexpected token in parameter list: #{current_token ? current_token[:type] : 'nil'} #{current_token ? current_token[:value] : ''}"
-            
+
             # Not a valid parameter or varargs
             @errors << {
               message: "Expected parameter name",
@@ -2529,14 +2529,14 @@ module Vinter
             }
             break
           end
-        end        
+        end
         if current_token && current_token[:type] == :comma
           advance
         else
           break
         end
       end
-      
+
       params
     end
   end

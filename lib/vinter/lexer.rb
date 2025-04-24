@@ -47,14 +47,14 @@ module Vinter
           # Find the end of the line
           line_end = chunk.index("\n") || chunk.length
           comment_text = chunk[0...line_end]
-          
+
           @tokens << {
             type: :comment,
             value: comment_text,
             line: @line_num,
             column: @column
           }
-          
+
           @position += comment_text.length
           @column += comment_text.length
           next
@@ -65,12 +65,12 @@ module Vinter
           i = 1
           escaped = false
           string_value = quote
-          
+
           # Keep going until we find an unescaped closing quote
           while i < chunk.length
             char = chunk[i]
             string_value += char
-            
+
             if char == '\\' && !escaped
               escaped = true
             elsif (char == "\n" or char == quote) && !escaped
@@ -79,10 +79,10 @@ module Vinter
             elsif escaped
               escaped = false
             end
-            
+
             i += 1
           end
-          
+
           # Add the string token if we found a closing quote
           if i < chunk.length || (i == chunk.length && chunk[-1] == quote)
             @tokens << {
@@ -91,7 +91,7 @@ module Vinter
               line: @line_num,
               column: @column
             }
-            
+
             @column += string_value.length
             @position += string_value.length
             next
@@ -137,7 +137,7 @@ module Vinter
           @position += match[0].length
           next
         end
-        
+
         # Handle Vim special variables with v: prefix
         if match = chunk.match(/\Av:[a-zA-Z_][a-zA-Z0-9_]*/)
           @tokens << {
@@ -150,7 +150,7 @@ module Vinter
           @position += match[0].length
           next
         end
-        
+
         # Handle script-local identifiers with s: prefix
         if match = chunk.match(/\As:[a-zA-Z_][a-zA-Z0-9_]*/)
           @tokens << {
@@ -203,7 +203,7 @@ module Vinter
           next
         end
 
-        
+
         # Handle global variables with g: prefix
         if match = chunk.match(/\Ag:[a-zA-Z_][a-zA-Z0-9_]*/)
           @tokens << {
@@ -216,7 +216,7 @@ module Vinter
           @position += match[0].length
           next
         end
-        
+
         # Handle argument variables with a: prefix
         if match = chunk.match(/\Aa:[a-zA-Z_][a-zA-Z0-9_]*/) || match = chunk.match(/\Aa:[A-Z0-9]/)
           @tokens << {
