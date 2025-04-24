@@ -561,3 +561,114 @@ command! -range SumLines echo <line1> + <line2>
 nnoremap <F2> :echo "F2 pressed"<CR>
 vnoremap <Leader>s :sort<CR>
 inoremap <C-d> <C-o>dd
+
+" Abbreviation
+iabbrev teh the
+iabbrev adn and
+
+" -----------------------------------------------------------------------------
+" 24. Syntax Highlighting Operations
+" -----------------------------------------------------------------------------
+" Syntax functions
+let current_syntax = &syntax                           " Get current syntax
+let syn_id = synID(line('.'), col('.'), 1)             " Get syntax ID at cursor
+let syn_name = synIDattr(syn_id, 'name')               " Get syntax name
+let hi_group = synIDtrans(syn_id)                      " Get highlight group
+let hi_fg = synIDattr(hi_group, 'fg')                  " Get foreground color
+
+" -----------------------------------------------------------------------------
+" 25. Script Variables and Functions Visibility
+" -----------------------------------------------------------------------------
+" Script-local variables (s:) are only visible within the script
+let s:secret = "You can't see me from outside"
+
+" Expose a function to other scripts
+function! GetScriptName()
+  return expand('<sfile>:t')
+endfunction
+
+" Script-local function (only accessible in this script)
+function! s:internal_func()
+  echo "This is an internal function"
+endfunction
+
+" Explicitly public function (can be called from other scripts)
+function! PublicFunc()
+  call s:internal_func()
+  echo "This function calls the internal one"
+endfunction
+
+" -----------------------------------------------------------------------------
+" 26. Complete Example
+" -----------------------------------------------------------------------------
+" Utility function to count words in text
+function! CountWords(text)
+  let words = split(a:text, '\s\+')
+  return len(words)
+endfunction
+
+" Create a demo function to show variable scopes
+function! ScopeDemo(arg)
+  let l:local_var = "Local variable"
+  let g:global_var = "Global variable"
+  let s:script_var = "Script variable"
+  
+  echo "Argument: " . a:arg
+  echo "Local: " . l:local_var
+  echo "Global: " . g:global_var
+  echo "Script: " . s:script_var
+  
+  return CountWords(a:arg)
+endfunction
+
+" Example of a function that modifies a list (reference type)
+function! ReverseAndAdd(list, item)
+  call reverse(a:list)
+  call add(a:list, a:item)
+  return a:list
+endfunction
+
+" Demo dictionary with attached methods
+let g:color_dict = {
+      \ 'red': '#FF0000',
+      \ 'green': '#00FF00',
+      \ 'blue': '#0000FF',
+      \ 'get_hex': function('get'),
+      \ 'add_color': function({d, name, hex -> extend(d, {name: hex})})
+      \ }
+
+" -----------------------------------------------------------------------------
+" Usage examples (uncomment to execute)
+" -----------------------------------------------------------------------------
+" Display some basic information
+" echo "Vim version: " . v:version
+" echo "Features: " . has('python') . " (Python), " . has('lua') . " (Lua)"
+" echo "Count words: " . CountWords("This is a test string")
+" echo "Script name: " . GetScriptName()
+
+" Test the scope demo function
+" let word_count = ScopeDemo("This is a test argument with multiple words")
+" echo "Word count: " . word_count
+
+" Test list manipulation
+" let demo_list = ['a', 'b', 'c']
+" let result_list = ReverseAndAdd(demo_list, 'd')
+" echo "Result list: " . string(result_list)
+
+" Test dictionary methods
+" echo "Red hex: " . g:color_dict.get_hex('red', 'unknown')
+" call g:color_dict.add_color('yellow', '#FFFF00')
+" echo "All colors: " . string(g:color_dict)
+
+" -----------------------------------------------------------------------------
+" Detect if this script was sourced or executed
+" -----------------------------------------------------------------------------
+if expand('<sfile>') ==# expand('%:p')
+  echo "This script was executed directly"
+else
+  echo "This script was sourced by another script"
+endif
+
+" =============================================================================
+" End of Script
+" =============================================================================

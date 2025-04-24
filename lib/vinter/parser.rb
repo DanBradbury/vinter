@@ -1626,35 +1626,46 @@ module Vinter
           }
         elsif token[:value] == 'function'
           advance # Skip 'function'
-
           # Expect opening parenthesis
           if current_token && current_token[:type] == :paren_open
             # This is a function reference call
             paren_token = advance # Skip '('
 
-            # Parse the function name as a string
-            func_name = nil
+            # Parse the function name as a string or arrow function
             if current_token && current_token[:type] == :string
               func_name = current_token[:value]
               advance
+
+              # Expect closing parenthesis
+              expect(:paren_close) # Skip ')'
+
+              return {
+                type: :function_reference,
+                function_name: func_name,
+                line: line,
+                column: column
+              }
+            elsif current_token && current_token[:type] == :brace_open
+              # This is an arrow function inside function()
+              arrow_function = parse_vim_lambda(line, column)
+
+              # Expect closing parenthesis
+              expect(:paren_close) # Skip ')'
+
+              return {
+                type: :function_reference,
+                function_body: arrow_function,
+                line: line,
+                column: column
+              }
             else
               @errors << {
-                message: "Expected string with function name in function() call",
+                message: "Expected string or arrow function definition in function() call",
                 position: @position,
                 line: current_token ? current_token[:line] : 0,
                 column: current_token ? current_token[:column] : 0
               }
             end
-
-            # Expect closing parenthesis
-            expect(:paren_close) # Skip ')'
-
-            return {
-              type: :function_reference,
-              function_name: func_name,
-              line: line,
-              column: column
-            }
           else
             # If not followed by parenthesis, it's likely a function declaration
             @errors << {
@@ -2357,6 +2368,11 @@ module Vinter
       advance  # Skip '{'
       entries = []
 
+      # Handle whitespace after opening brace
+      while current_token && current_token[:type] == :whitespace
+        advance
+      end
+
       # Empty dictionary
       if current_token && current_token[:type] == :brace_close
         advance  # Skip '}'
@@ -2369,11 +2385,21 @@ module Vinter
       end
 
       # Parse dictionary entries
-      loop do
+      while current_token && current_token[:type] != :brace_close
+        # Skip any backslash line continuation markers and whitespace
+        while current_token && (current_token[:type] == :backslash || current_token[:type] == :whitespace)
+          advance
+        end
+
+        # Break if we reached the end or found closing brace
+        if !current_token || current_token[:type] == :brace_close
+          break
+        end
+
         # Parse key (string or identifier)
         key = nil
         if current_token && (current_token[:type] == :string || current_token[:type] == :identifier)
-          key = current_token[:type] == :string ? current_token[:value] : current_token[:value]
+          key = current_token[:value]
           advance  # Skip key
         else
           @errors << {
@@ -2382,11 +2408,36 @@ module Vinter
             line: current_token ? current_token[:line] : 0,
             column: current_token ? current_token[:column] : 0
           }
-          break
+          # Try to recover by advancing until we find a colon or closing brace
+          while current_token && current_token[:type] != :colon && current_token[:type] != :brace_close
+            advance
+          end
+          if !current_token || current_token[:type] == :brace_close
+            break
+          end
+        end
+
+        # Skip whitespace after key
+        while current_token && current_token[:type] == :whitespace
+          advance
         end
 
         # Expect colon
-        expect(:colon)
+        if current_token && current_token[:type] == :colon
+          advance  # Skip colon
+        else
+          @errors << {
+            message: "Expected colon after dictionary key",
+            position: @position,
+            line: current_token ? current_token[:line] : 0,
+            column: current_token ? current_token[:column] : 0
+          }
+        end
+
+        # Skip whitespace after colon
+        while current_token && current_token[:type] == :whitespace
+          advance
+        end
 
         # Parse value
         value = parse_expression
@@ -2396,16 +2447,38 @@ module Vinter
           value: value
         }
 
-        if current_token && current_token[:type] == :comma
-          advance  # Skip comma
-          # Allow trailing comma
-          break if current_token && current_token[:type] == :brace_close
-        else
-          break
+        # Skip any whitespace, backslash line continuation markers, and commas
+        found_comma = false
+        while current_token && (current_token[:type] == :whitespace ||
+                               current_token[:type] == :backslash ||
+                               current_token[:type] == :comma)
+          found_comma = true if current_token[:type] == :comma
+          advance
+        end
+
+        # If no comma was found and we haven't reached the end, that's an error
+        # unless we've reached the closing brace
+        if !found_comma && current_token && current_token[:type] != :brace_close
+          @errors << {
+            message: "Expected comma or closing brace after dictionary entry",
+            position: @position,
+            line: current_token ? current_token[:line] : 0,
+            column: current_token ? current_token[:column] : 0
+          }
         end
       end
 
-      expect(:brace_close)  # Expect and skip '}'
+      # Make sure we have a closing brace
+      if current_token && current_token[:type] == :brace_close
+        advance  # Skip '}'
+      else
+        @errors << {
+          message: "Expected closing brace for dictionary",
+          position: @position,
+          line: current_token ? current_token[:line] : 0,
+          column: current_token ? current_token[:column] : 0
+        }
+      end
 
       {
         type: :dict_literal,
