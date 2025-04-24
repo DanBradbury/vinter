@@ -2004,6 +2004,20 @@ module Vinter
 
       # Parse list elements
       while @position < @tokens.length
+        # Handle line continuation characters (backslash)
+        if current_token && current_token[:type] == :backslash
+          # Skip the backslash token
+          advance
+
+          # Skip any whitespace that might follow the backslash
+          while current_token && current_token[:type] == :whitespace
+            advance
+          end
+
+          # Don't add a comma - just continue to parse the next element
+          next
+        end
+
         # Check if we've reached the end of the list
         if current_token && current_token[:type] == :bracket_close
           advance  # Skip ']'
@@ -2016,11 +2030,15 @@ module Vinter
         # Continue if there's a comma
         if current_token && current_token[:type] == :comma
           advance  # Skip comma
+        # Or if the next token is a backslash (line continuation)
+        elsif current_token && current_token[:type] == :backslash
+          # We'll handle this in the next iteration
+          next
         else
-          # If no comma and not a closing bracket, then it's an error
+          # If no comma and not a closing bracket or backslash, then it's an error
           if current_token && current_token[:type] != :bracket_close
             @errors << {
-              message: "Expected comma or closing bracket after list element",
+              message: "Expected comma, backslash, or closing bracket after list element",
               position: @position,
               line: current_token[:line],
               column: current_token[:column]

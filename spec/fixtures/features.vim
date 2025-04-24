@@ -35,3 +35,21 @@ let num_hex = 0xFF     " Hexadecimal (255)
 let num_oct = 0o77     " Octal (63)
 let num_bin = 0b1010   " Binary (10)
 let num_float = 3.14   " Float
+
+" Strings
+let str1 = "Double quoted string"
+let str2 = 'Single quoted string'
+let str3 = "String with \"escaped quotes\""
+let str4 = "String with \nnewline"
+let str5 = "String with " . "concatenation"        " String concatenation with .
+let str6 = printf("Formatted %s with %d", "string", 42)  " Formatted string
+
+" Special strings
+let str_literal = "Line one
+      \Line two
+      \Line three"     " Multi-line string with line continuation
+let heredoc = [
+      \ 'Line one',
+      \ 'Line two',
+      \ 'Line three'
+      \ ]               " List of strings (another way for multi-line)
