@@ -553,3 +553,11 @@ command! Hello echo "Hello, World!"
 command! -nargs=1 Greet echo "Hello, " . <q-args> . "!"
 command! -nargs=+ -complete=file ListFiles echo <q-args>
 command! -range SumLines echo <line1> + <line2>
+
+" -----------------------------------------------------------------------------
+" 23. Maps and Abbreviations
+" -----------------------------------------------------------------------------
+" Key mapping
+nnoremap <F2> :echo "F2 pressed"<CR>
+vnoremap <Leader>s :sort<CR>
+inoremap <C-d> <C-o>dd

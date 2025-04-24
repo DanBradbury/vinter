@@ -2,7 +2,7 @@ module Vinter
   class Lexer
     TOKEN_TYPES = {
       # Vim9 specific keywords
-      keyword: /\b(if|else|elseif|endif|while|endwhile|for|endfor|def|enddef|function|endfunction|endfunc|return|const|var|final|import|export|class|extends|static|enum|type|vim9script|abort|autocmd|echom|echoerr|echohl|echomsg|let|execute|continue|break|try|catch|finally|endtry|throw|runtime|silent|delete|command)\b/,
+      keyword: /\b(if|else|elseif|endif|while|endwhile|for|endfor|def|enddef|function|endfunction|endfunc|return|const|var|final|import|export|class|extends|static|enum|type|vim9script|abort|autocmd|echom|echoerr|echohl|echomsg|let|execute|continue|break|try|catch|finally|endtry|throw|runtime|silent|delete|command|nnoremap|nmap|inoremap|imap|vnoremap|vmap|xnoremap|xmap|cnoremap|cmap|noremap|map)\b/,
       # Identifiers can include # and special characters
       identifier: /\b[a-zA-Z_][a-zA-Z0-9_#]*\b/,
       # Single-character operators
@@ -322,6 +322,25 @@ module Vinter
           @column += register_token.length
           @position += register_token.length
           next
+        end
+
+        # In the tokenize method, add special handling for common mapping components
+        if chunk.start_with?('<CR>', '<Esc>', '<Tab>', '<Space>', '<C-') ||
+           (chunk =~ /\A<[A-Za-z0-9-_]+>/)
+          # Extract the special key notation
+          match = chunk.match(/\A(<[^>]+>)/)
+          if match
+            special_key = match[1]
+            @tokens << {
+              type: :special_key,
+              value: special_key,
+              line: @line_num,
+              column: @column
+            }
+            @position += special_key.length
+            @column += special_key.length
+            next
+          end
         end
 
         # Skip whitespace but track position

@@ -88,12 +88,80 @@ module Vinter
       { type: :program, body: statements }
     end
 
+    def parse_mapping_statement
+      token = current_token
+      advance # Skip the mapping command
+      line = token[:line]
+      column = token[:column]
+      mapping_command = token[:value]
+
+      # Parse options (like <silent>, <buffer>, etc.)
+      options = []
+      while current_token &&
+            (current_token[:type] == :identifier || current_token[:type] == :special_key) &&
+            current_token[:value].start_with?('<') &&
+            current_token[:value].end_with?('>')
+        options << current_token[:value]
+        advance
+      end
+
+      # Parse the key sequence
+      key_sequence = nil
+      if current_token
+        if current_token[:type] == :special_key ||
+           (current_token[:value].start_with?('<') && current_token[:value].end_with?('>'))
+          key_sequence = current_token[:value]
+          advance
+        else
+          key_sequence = current_token[:value]
+          advance
+        end
+      end
+
+      # Collect everything else until end of line as the mapping target
+      # This is raw text and shouldn't be parsed as an expression
+      target_tokens = []
+
+      # Continue collecting tokens until we hit a newline or comment
+      while current_token &&
+            current_token[:type] != :comment &&
+            (current_token[:type] != :whitespace || current_token[:value].strip != '')
+
+        # If we hit a newline not preceded by a continuation character, we're done
+        if current_token[:value] == "\n" &&
+           (target_tokens.empty? || target_tokens.last[:value][-1] != '\\')
+          break
+        end
+
+        target_tokens << current_token
+        advance
+      end
+
+      # Join the target tokens to form the raw mapping target
+      target = target_tokens.map { |t| t[:value] }.join('')
+
+      {
+        type: :mapping_statement,
+        command: mapping_command,
+        options: options,
+        key_sequence: key_sequence,
+        target: target,
+        line: line,
+        column: column
+      }
+    end
+
     def parse_statement
       if !current_token
         return nil
       end
 
-      if current_token[:type] == :runtime_command
+      # Add case for mapping commands
+      if current_token[:type] == :keyword &&
+         ['nnoremap', 'nmap', 'inoremap', 'imap', 'vnoremap', 'vmap',
+          'xnoremap', 'xmap', 'cnoremap', 'cmap', 'noremap', 'map'].include?(current_token[:value])
+        parse_mapping_statement
+      elsif current_token[:type] == :runtime_command
         parse_runtime_statement
       elsif current_token[:type] == :keyword && current_token[:value] == 'runtime'
         parse_runtime_statement
@@ -1545,7 +1613,18 @@ module Vinter
         }
       # Add special handling for keywords that might appear in expressions
       when :keyword
-        if token[:value] == 'function'
+        # Special handling for map-related keywords when they appear in expressions
+        if ['map', 'nmap', 'imap', 'vmap', 'xmap', 'noremap', 'nnoremap',
+             'inoremap', 'vnoremap', 'xnoremap', 'cnoremap', 'cmap'].include?(token[:value])
+          # Treat map commands as identifiers when inside expressions
+          advance
+          return {
+            type: :identifier,
+            name: token[:value],
+            line: line,
+            column: column
+          }
+        elsif token[:value] == 'function'
           advance # Skip 'function'
 
           # Expect opening parenthesis
