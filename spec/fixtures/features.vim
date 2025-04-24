@@ -468,3 +468,88 @@ call append('.', 'Add after current')                  " Append after current li
 call append(0, 'Add to top')                           " Add to top of buffer
 let line_count = line('$')                             " Number of lines in buffer
 call deletebufline('%', 5)                             " Delete line 5 (Vim 8.1+)
+
+" -----------------------------------------------------------------------------
+" 18. Various Utility Functions
+" -----------------------------------------------------------------------------
+" Type checking
+let type_num = type(123)                               " 0: Number
+let type_str = type("abc")                             " 1: String
+let type_list = type([1, 2, 3])                        " 3: List
+let type_dict = type({'a': 1})                         " 4: Dictionary
+let type_float = type(1.23)                            " 5: Float
+let type_bool = type(v:true)                           " 6: Boolean (Vim 8.0+)
+let type_null = type(v:null)                           " 7: Null (Vim 8.0+)
+let type_func = type(function('strlen'))               " 2: Funcref
+
+" Type conversion
+let str_to_num = str2nr("123")                         " String to number
+let flt_to_str = string(3.14)                          " Float to string
+let num_to_str = string(42)                            " Number to string
+let list_to_str = string([1, 2, 3])                    " List to string
+let dict_to_str = string({'a': 1})                     " Dict to string
+let char_to_nr = char2nr('A')                          " Character to number (65)
+let nr_to_char = nr2char(65)                           " Number to character ('A')
+let str_to_float = str2float("3.14")                   " String to float
+let str_to_list = split("a b c")                       " String to list
+let list_to_str2 = join(['a', 'b', 'c'])               " List to string
+
+" Random numbers (Vim 8.1+)
+let random_num = rand()                                " Random number
+let random_range = rand(1, 100)                        " Random in range [1, 100]
+call srand(localtime())                                " Seed random generator
+
+" Time and date
+let now = localtime()                                  " Unix timestamp
+let time_str = strftime('%Y-%m-%d %H:%M:%S', now)      " Format timestamp
+let elapsed = reltime()                                " Start timing
+let seconds = reltimefloat(reltime(elapsed))           " Elapsed seconds
+
+" Eval and execute
+let result = eval('1 + 2 * 3')                         " Evaluate expression
+execute "echo 'Dynamic command'"                       " Execute string as command
+
+" JSON (Vim 8.0+)
+let json_str = json_encode({'name': 'John', 'age': 30}) " Encode to JSON
+let decoded = json_decode('{"name":"John","age":30}')   " Decode from JSON
+
+" -----------------------------------------------------------------------------
+" 19. Autoloading Functions
+" -----------------------------------------------------------------------------
+" In autoload/myutils.vim:
+" function! myutils#capitalize(text)
+"   return toupper(a:text[0]) . a:text[1:]
+" endfunction
+"
+" Call it with:
+" let capitalized = myutils#capitalize('hello')
+
+" -----------------------------------------------------------------------------
+" 20. Script and Function Profiling
+" -----------------------------------------------------------------------------
+" Start profiling
+" profile start profile.log
+" profile func *
+" profile file *
+"
+" End profiling
+" profile pause
+
+" -----------------------------------------------------------------------------
+" 21. Vim Commands
+" -----------------------------------------------------------------------------
+" Ex command execution
+echo "Display message"                                 " Display message
+echom "Recorded message"                               " Display and record message
+echohl ErrorMsg | echo "Error" | echohl None           " Highlighted message
+execute "normal! gg"                                   " Execute normal mode command
+silent execute "1,5delete"                             " Execute command silently
+
+" -----------------------------------------------------------------------------
+" 22. User Commands
+" -----------------------------------------------------------------------------
+" Define custom command
+command! Hello echo "Hello, World!"
+command! -nargs=1 Greet echo "Hello, " . <q-args> . "!"
+command! -nargs=+ -complete=file ListFiles echo <q-args>
+command! -range SumLines echo <line1> + <line2>

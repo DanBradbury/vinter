@@ -101,6 +101,8 @@ module Vinter
         case current_token[:value]
         when 'if'
           parse_if_statement
+        when 'command'
+          parse_command_definition
         when 'while'
           parse_while_statement
         when 'for'
@@ -149,6 +151,8 @@ module Vinter
           parse_autocmd_statement
         elsif current_token[:value] == "filter" || current_token[:value] == "filt"
           parse_filter_command
+        elsif current_token[:value] == "command"
+          parse_command_definition
         else
           parse_expression_statement
         end
@@ -1417,18 +1421,35 @@ module Vinter
 
         if current_token && current_token[:type] == :operator && current_token[:value] == '.' &&
           operator_precedence(current_token[:value]) >= precedence
-
          op_token = advance # Skip the operator
-         right = parse_binary_expression(operator_precedence('.') + 1)
 
-         left = {
-           type: :binary_expression,
-           operator: '.',
-           left: left,
-           right: right,
-           line: op_token[:line],
-           column: op_token[:column]
-         }
+         # Check if we're dealing with a command placeholder on either side
+         if (left && left[:type] == :command_arg_placeholder) ||
+            (peek_token && peek_token[:type] == :command_arg_placeholder)
+           # Handle command-specific concatenation
+           right = parse_binary_expression(operator_precedence('.') + 1)
+
+           left = {
+             type: :command_concat_expression,  # Special type for command concatenation
+             operator: '.',
+             left: left,
+             right: right,
+             line: op_token[:line],
+             column: op_token[:column]
+           }
+         else
+           # Normal expression concatenation
+           right = parse_binary_expression(operator_precedence('.') + 1)
+
+           left = {
+             type: :binary_expression,
+             operator: '.',
+             left: left,
+             right: right,
+             line: op_token[:line],
+             column: op_token[:column]
+           }
+         end
         elsif current_token && current_token[:type] == :operator &&
           ['<', '>', '=', '!'].include?(current_token[:value]) &&
           peek_token && peek_token[:type] == :operator && peek_token[:value] == '='
@@ -1513,6 +1534,15 @@ module Vinter
       expr = nil
 
       case token[:type]
+      # Add handling for command arg placeholders
+      when :command_arg_placeholder
+        advance
+        expr = {
+          type: :command_arg_placeholder,
+          value: token[:value],
+          line: line,
+          column: column
+        }
       # Add special handling for keywords that might appear in expressions
       when :keyword
         if token[:value] == 'function'
@@ -1558,7 +1588,7 @@ module Vinter
             return nil
           end
         # Legacy Vim allows certain keywords as identifiers in expressions
-        elsif ['return'].include?(token[:value])
+        elsif ['return', 'type'].include?(token[:value])
           # Handle 'return' keyword specially when it appears in an expression context
           advance
           @warnings << {
@@ -1567,6 +1597,11 @@ module Vinter
             line: line,
             column: column
           }
+          # Check if this is a function call for 'type'
+          if token[:value] == 'type' && current_token && current_token[:type] == :paren_open
+            return parse_function_call(token[:value], line, column)
+          end
+
           expr = {
             type: :identifier,
             name: token[:value],
@@ -1675,7 +1710,7 @@ module Vinter
         }
       when :identifier
         # Special handling for Vim built-in functions
-        if ['has', 'exists', 'empty', 'filter', 'get'].include?(token[:value])
+        if ['has', 'exists', 'empty', 'filter', 'get', 'type'].include?(token[:value])
           return parse_builtin_function_call(token[:value], line, column)
         end
 
@@ -2622,6 +2657,89 @@ module Vinter
       {
         type: :export_statement,
         export: exported_item,
+        line: line,
+        column: column
+      }
+    end
+
+    def parse_command_definition
+      token = advance # Skip 'command' or 'command!'
+      line = token[:line]
+      column = token[:column]
+
+      # Check if the command has a bang (!)
+      has_bang = false
+      if current_token && current_token[:type] == :operator && current_token[:value] == '!'
+        has_bang = true
+        advance # Skip '!'
+      end
+
+      # Parse command options/attributes (starting with hyphen)
+      attributes = []
+      while current_token && (
+        (current_token[:type] == :operator && current_token[:value] == '-') ||
+        (current_token[:type] == :identifier && current_token[:value].start_with?('-'))
+      )
+        # Handle option as a single attribute if it's already combined
+        if current_token[:type] == :identifier && current_token[:value].start_with?('-')
+          attributes << current_token[:value]
+          advance
+        else
+          # Otherwise combine the hyphen with the following identifier
+          advance # Skip the hyphen
+          if current_token && current_token[:type] == :identifier
+            attributes << "-#{current_token[:value]}"
+            advance
+          end
+        end
+
+        # If there's an = followed by a value, include it in the attribute
+        if current_token && current_token[:type] == :operator && current_token[:value] == '='
+          attribute = attributes.pop # Take the last attribute we added
+          advance # Skip the '='
+
+          # Get the value (number or identifier)
+          if current_token && (current_token[:type] == :number || current_token[:type] == :identifier)
+            attribute += "=#{current_token[:value]}"
+            attributes << attribute
+            advance
+          end
+        end
+      end
+
+      # Parse the command name
+      command_name = nil
+      if current_token && current_token[:type] == :identifier
+        command_name = current_token[:value]
+        advance
+      else
+        @errors << {
+          message: "Expected command name",
+          position: @position,
+          line: current_token ? current_token[:line] : 0,
+          column: current_token ? current_token[:column] : 0
+        }
+      end
+
+      # Parse the command implementation - collect all remaining tokens as raw parts
+      implementation_parts = []
+      while @position < @tokens.length
+        # Break on end of line or comment
+        if !current_token || current_token[:type] == :comment ||
+           (current_token[:value] == "\n" && !current_token[:value].start_with?("\\"))
+          break
+        end
+
+        implementation_parts << current_token
+        advance
+      end
+
+      {
+        type: :command_definition,
+        name: command_name,
+        has_bang: has_bang,
+        attributes: attributes,
+        implementation: implementation_parts,
         line: line,
         column: column
       }

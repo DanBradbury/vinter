@@ -2,7 +2,7 @@ module Vinter
   class Lexer
     TOKEN_TYPES = {
       # Vim9 specific keywords
-      keyword: /\b(if|else|elseif|endif|while|endwhile|for|endfor|def|enddef|function|endfunction|endfunc|return|const|var|final|import|export|class|extends|static|enum|type|vim9script|abort|autocmd|echom|echoerr|echohl|echomsg|let|execute|continue|break|try|catch|finally|endtry|throw|runtime|silent|delete)\b/,
+      keyword: /\b(if|else|elseif|endif|while|endwhile|for|endfor|def|enddef|function|endfunction|endfunc|return|const|var|final|import|export|class|extends|static|enum|type|vim9script|abort|autocmd|echom|echoerr|echohl|echomsg|let|execute|continue|break|try|catch|finally|endtry|throw|runtime|silent|delete|command)\b/,
       # Identifiers can include # and special characters
       identifier: /\b[a-zA-Z_][a-zA-Z0-9_#]*\b/,
       # Single-character operators
@@ -97,6 +97,20 @@ module Vinter
             @position += string_value.length
             next
           end
+        end
+
+        # Add special handling for command options in the tokenize method
+        if chunk.start_with?('<q-args>', '<f-args>', '<args>')
+          arg_token = chunk.match(/\A(<q-args>|<f-args>|<args>)/)[0]
+          @tokens << {
+            type: :command_arg_placeholder,
+            value: arg_token,
+            line: @line_num,
+            column: @column
+          }
+          @column += arg_token.length
+          @position += arg_token.length
+          next
         end
 
         # Also add special handling for 'silent!' keyword
