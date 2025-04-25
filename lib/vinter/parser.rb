@@ -3098,7 +3098,7 @@ module Vinter
             (current_token[:type] == :operator && current_token[:value] == '.')
           )
             # Add debug
-            puts "Found potential varargs token: #{current_token[:type]} #{current_token[:value]}"
+            #puts "Found potential varargs token: #{current_token[:type]} #{current_token[:value]}"
 
             if current_token[:type] == :ellipsis
               token = current_token  # STORE the token before advancing
@@ -3117,16 +3117,16 @@ module Vinter
               dot_line = first_dot_token[:line]
               dot_column = first_dot_token[:column]
 
-              puts "Starting dot sequence at line #{dot_line}, column #{dot_column}"
+              #puts "Starting dot sequence at line #{dot_line}, column #{dot_column}"
 
               while current_token && current_token[:type] == :operator && current_token[:value] == '.'
                 dot_count += 1
-                puts "Found dot #{dot_count}"
+                #puts "Found dot #{dot_count}"
                 advance
               end
 
               if dot_count == 3
-                puts "Complete varargs found (3 dots)"
+                #puts "Complete varargs found (3 dots)"
                 params << {
                   type: :var_args_legacy,
                   name: '...',
@@ -3134,13 +3134,13 @@ module Vinter
                   column: dot_column
                 }
               else
-                puts "Incomplete varargs: only #{dot_count} dots found"
+                #puts "Incomplete varargs: only #{dot_count} dots found"
               end
             end
             break
           else
             # Add debug to see what unexpected token we're encountering
-            puts "Unexpected token in parameter list: #{current_token ? current_token[:type] : 'nil'} #{current_token ? current_token[:value] : ''}"
+            #puts "Unexpected token in parameter list: #{current_token ? current_token[:type] : 'nil'} #{current_token ? current_token[:value] : ''}"
 
             # Not a valid parameter or varargs
             @errors << {

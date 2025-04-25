@@ -326,7 +326,7 @@ module Vinter
 
         # In the tokenize method, add special handling for common mapping components
         if chunk.start_with?('<CR>', '<Esc>', '<Tab>', '<Space>', '<C-') ||
-           (chunk =~ /\A<[A-Za-z0-9-_]+>/)
+           (chunk =~ /\A<[A-Za-z0-9\-_]+>/)
           # Extract the special key notation
           match = chunk.match(/\A(<[^>]+>)/)
           if match

@@ -358,7 +358,7 @@ RSpec.describe Vinter::Parser do
       tokens = lexer.tokenize
       parser = described_class.new(tokens)
       result = parser.parse
-      puts result[:ast].inspect
+      #puts result[:ast].inspect
 
       expect(result[:ast][:type]).to eq(:program)
       expect(result[:ast][:body].size).to eq(1)
@@ -375,7 +375,7 @@ RSpec.describe Vinter::Parser do
       tokens = lexer.tokenize
       parser = described_class.new(tokens)
       result = parser.parse
-      puts result[:ast].inspect
+      #puts result[:ast].inspect
 
       expect(result[:ast][:type]).to eq(:program)
       expect(result[:ast][:body].size).to eq(1)
