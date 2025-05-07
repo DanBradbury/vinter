@@ -26,6 +26,7 @@ GEM
     racc (1.8.1)
     rainbow (3.1.1)
     rake (13.2.1)
+    redcarpet (3.6.1)
     regexp_parser (2.10.0)
     rspec (3.13.0)
       rspec-core (~> 3.13.0)
@@ -80,7 +81,7 @@ GEM
     yard (0.9.37)
 
 PLATFORMS
-  x64-mingw-ucrt
+  arm64-darwin-23
 
 DEPENDENCIES
   bundler (~> 2.3)
