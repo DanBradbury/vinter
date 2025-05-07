@@ -21,7 +21,7 @@ gem install vinter
 
 ### Command Line
 
-Lint a Vim9 script file:
+Updated vim linter for legacy and vim9script
 
 ```bash
 vinter path/to/your/script.vim

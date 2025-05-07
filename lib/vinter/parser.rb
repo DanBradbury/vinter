@@ -196,7 +196,7 @@ module Vinter
           parse_execute_statement
         when 'let'
           parse_let_statement
-        when 'echohl', 'echomsg', 'echoerr'
+        when 'echohl', 'echomsg', 'echoerr', 'echom'
           parse_echo_statement
         when 'augroup'
           parse_augroup_statement
@@ -1962,7 +1962,17 @@ module Vinter
           end_index = nil
           if current_token && current_token[:type] == :colon
             advance # Skip ':'
-            end_index = parse_expression
+            # handle omitted end index case like [6:]
+            if current_token && current_token[:type] == :bracket_close
+              end_index = {
+                type: :implicit_end_index,
+                value: nil,
+                line: current_token[:line],
+                column: current_token[:column]
+              }
+            else
+              end_index = parse_expression
+            end
           end
 
           expect(:bracket_close) # Skip ']'
@@ -2440,7 +2450,12 @@ module Vinter
         end
 
         # Parse value
-        value = parse_expression
+        if current_token && current_token[:type] == :brace_open
+          lambda_or_dict = parse_vim_lambda_or_dict(line, column)
+          value = lambda_or_dict
+        else
+          value = parse_expression
+        end
 
         entries << {
           key: key,
@@ -2677,6 +2692,49 @@ module Vinter
       }
     end
 
+    def parse_vim_lambda_or_dict(line, column)
+      # Save current position to peek ahead
+      start_position = @position
+      
+      advance # Skip opening brace
+      
+      # Check if this is a lambda by looking for parameter names followed by arrow
+      is_lambda = false
+      param_names = []
+      
+      # Parse until closing brace or arrow
+      while @position < @tokens.length && current_token[:type] != :brace_close
+        if current_token[:type] == :identifier
+          param_names << current_token[:value]
+          advance
+          
+          # Skip comma between parameters
+          if current_token && current_token[:type] == :comma
+            advance
+            next
+          end
+        elsif current_token[:type] == :operator && current_token[:value] == '->'
+          is_lambda = true
+          break
+        else
+          # If we see a colon, this is likely a nested dictionary
+          if current_token && current_token[:type] == :colon
+            break
+          end
+          advance
+        end
+      end
+      
+      # Reset position
+      @position = start_position
+      
+      if is_lambda
+        return parse_vim_lambda(line, column)
+      else
+        return parse_dict_literal(line, column)
+      end
+    end
+    
     def parse_import_statement
       token = advance # Skip 'import'
       line = token[:line]

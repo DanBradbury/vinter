@@ -285,6 +285,7 @@ let last_fruit = fruits[-1]          " Last item (cherry)
 
 " List slicing
 let two_fruits = fruits[0:1]         " First two items ['apple', 'banana']
+let last_two_fruits = fruits[-2:]    " Last two items ['banana', 'cherry']
 
 " List manipulation
 call add(fruits, 'date')             " Add item to end ['apple', 'banana', 'cherry', 'date']
@@ -668,6 +669,15 @@ if expand('<sfile>') ==# expand('%:p')
 else
   echo "This script was sourced by another script"
 endif
+
+"advanced nonsense
+let job = {
+    \ 'on_stdout': {chan_id, data, name->copilot_chat#api#handle_job_output(chan_id, data)},
+    \ 'on_exit': {chan_id, data, name->copilot_chat#api#handle_job_close(chan_id, data)},
+    \ 'on_stderr': {chan_id, data, name->copilot_chat#api#handle_job_error(chan_id, data)},
+    \ 'stdout_buffered': v:true,
+    \ 'stderr_buffered': v:true
+    \ }
 
 " =============================================================================
 " End of Script
