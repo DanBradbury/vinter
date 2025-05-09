@@ -95,6 +95,7 @@ module Vinter
 
             @column += string_value.length
             @position += string_value.length
+            @line_num += 1 if string_value.include?("\n")
             next
           end
         end

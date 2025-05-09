@@ -45,6 +45,7 @@ let str5 = "String with " . "concatenation"        " String concatenation with .
 let str6 = printf("Formatted %s with %d", "string", 42)  " Formatted string
 
 " Special strings
+" yes this example feels insane and nobody should ever write with this styling but its valid
 let str_literal = "Line one
       \Line two
       \Line three"     " Multi-line string with line continuation
