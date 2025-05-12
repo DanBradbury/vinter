@@ -8,7 +8,7 @@ RSpec.describe 'Integration Tests' do
     content = File.read(file_path)
     issues = linter.lint(content).select { |f| f[:type] == :error }
 
-    expect(issues.size).to eq(0)
+    expect(issues.size).to eq(0), issues.inspect
   end
 
   it 'correctly lints a legacy vim script file' do
@@ -32,7 +32,7 @@ RSpec.describe 'Integration Tests' do
     expect(issues.size).to eq(0), issues.inspect
   end
 
-  xit 'parses vimscript feature file without warnings' do
+  it 'parses vimscript feature file without warnings' do
     file_path = File.join(File.dirname(__FILE__), '..', 'fixtures', 'features.vim')
     content = File.read(file_path)
     issues = linter.lint(content).select { |f| f[:type] == :warning }
@@ -63,11 +63,20 @@ RSpec.describe 'Integration Tests' do
   end
 
   it 'handles backslash line continuations without warnings' do
-    content = <<-VIM
-let str_literal = "Line one
-            \\Line two
-            \\Line three"     " Multi-line string with line continuation
-    VIM
+#     content = <<-VIM
+# " Special strings
+# " yes this example feels insane and nobody should ever write with this styling but its valid
+# let str_literal = "Line one
+#       \Line two
+#       \Line three"     " Multi-line string with line continuation
+# let heredoc = [
+#       \ 'Line one',
+#       \ 'Line two',
+#       \ 'Line three'
+#       \ ]               " List of strings (another way for multi-line)
+#     VIM
+    file_path = File.join(File.dirname(__FILE__), '..', 'fixtures', 'isolated.vim')
+    content = File.read(file_path)
 
     issues = linter.lint(content).select { |f| f[:type] == :warning }
     pp issues

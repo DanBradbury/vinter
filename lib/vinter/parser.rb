@@ -1734,6 +1734,7 @@ module Vinter
           column: column
         }
       when :string
+        # parse_string
         if token[:value].start_with?('"')
           advance
           return {
@@ -2567,10 +2568,8 @@ module Vinter
         if current_token && current_token[:type] == :comma
           advance  # Skip comma
         # Or if the next token is a backslash (line continuation)
-        elsif current_token && current_token[:type] == :backslash
-          # We'll handle this in the next iteration
-          next
         else
+          # binding.pry
           # If no comma and not a closing bracket or backslash, then it's an error
           # if current_token && current_token[:type] != :bracket_close
           #   @errors << {
@@ -2584,9 +2583,10 @@ module Vinter
           # We still want to skip the closing bracket if it's there
           if current_token && current_token[:type] == :bracket_close
             advance
+            break
           end
-
-          break
+          advance
+          #next
         end
       end
 
