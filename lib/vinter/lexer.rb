@@ -116,6 +116,20 @@ module Vinter
           next
         end
 
+        # Special handling for a:000 variable arguments array
+        if chunk =~ /\Aa:0+/
+          varargs_token = chunk.match(/\Aa:0+/)[0]
+          @tokens << {
+            type: :arg_variable,
+            value: varargs_token,
+            line: @line_num,
+            column: @column
+          }
+          @column += varargs_token.length
+          @position += varargs_token.length
+          next
+        end
+
         # Also add special handling for 'silent!' keyword
         # Add this after the keyword check in tokenize method
         if chunk.start_with?('silent!')
