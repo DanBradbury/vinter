@@ -184,6 +184,42 @@ module Vinter
         }
       end
 
+      # Now, add specific handling for continue and break
+      if current_token[:type] == :keyword && current_token[:value] == 'continue'
+        token = advance # Skip 'continue'
+        return {
+          type: :continue_statement,
+          line: token[:line],
+          column: token[:column]
+        }
+      end
+
+      if current_token[:type] == :keyword && current_token[:value] == 'break'
+        token = advance # Skip 'break'
+        return {
+          type: :break_statement,
+          line: token[:line],
+          column: token[:column]
+        }
+      end
+
+      # Handle try-catch
+      if current_token[:type] == :keyword && current_token[:value] == 'try'
+        return parse_try_statement
+      end
+
+      # Handle throw
+      if current_token[:type] == :keyword && current_token[:value] == 'throw'
+        return parse_throw_statement
+      end
+
+      # Skip standalone catch, finally, endtry keywords outside of try blocks
+      if current_token[:type] == :keyword &&
+         ['catch', 'finally', 'endtry'].include?(current_token[:value])
+        token = advance # Skip these keywords
+        return nil
+      end
+
       # Add case for mapping commands
       if current_token[:type] == :keyword &&
          ['nnoremap', 'nmap', 'inoremap', 'imap', 'vnoremap', 'vmap',
@@ -3266,5 +3302,144 @@ module Vinter
 
       params
     end
+
+    def parse_try_statement
+      token = advance # Skip 'try'
+      line = token[:line]
+      column = token[:column]
+
+      # Parse the try body
+      body = []
+      catch_clauses = []
+      finally_clause = nil
+
+      # Parse statements in the try block
+      while @position < @tokens.length
+        if current_token && current_token[:type] == :keyword &&
+           ['catch', 'finally', 'endtry'].include?(current_token[:value])
+          break
+        end
+
+        stmt = parse_statement
+        body << stmt if stmt
+      end
+
+      # Parse catch clauses
+      while @position < @tokens.length &&
+            current_token && current_token[:type] == :keyword &&
+            current_token[:value] == 'catch'
+        catch_token = advance # Skip 'catch'
+        catch_line = catch_token[:line]
+        catch_column = catch_token[:column]
+
+        # Parse the pattern (anything until the next statement)
+        pattern = ''
+        pattern_tokens = []
+
+        # Collect all tokens until we hit a newline or a statement
+        while @position < @tokens.length
+          if !current_token ||
+             (current_token[:type] == :whitespace && current_token[:value].include?("\n")) ||
+             current_token[:type] == :comment
+            break
+          end
+
+          pattern_tokens << current_token
+          pattern += current_token[:value]
+          advance
+        end
+
+        # Parse the catch body
+        catch_body = []
+        while @position < @tokens.length
+          if current_token && current_token[:type] == :keyword &&
+             ['catch', 'finally', 'endtry'].include?(current_token[:value])
+            break
+          end
+
+          stmt = parse_statement
+          catch_body << stmt if stmt
+        end
+
+        catch_clauses << {
+          type: :catch_clause,
+          pattern: pattern.strip,
+          body: catch_body,
+          line: catch_line,
+          column: catch_column
+        }
+      end
+
+      # Parse finally clause if present
+      if @position < @tokens.length &&
+         current_token && current_token[:type] == :keyword &&
+         current_token[:value] == 'finally'
+        finally_token = advance # Skip 'finally'
+        finally_line = finally_token[:line]
+        finally_column = finally_token[:column]
+
+        # Parse the finally body
+        finally_body = []
+        while @position < @tokens.length
+          if current_token && current_token[:type] == :keyword && current_token[:value] == 'endtry'
+            break
+          end
+
+          stmt = parse_statement
+          finally_body << stmt if stmt
+        end
+
+        finally_clause = {
+          type: :finally_clause,
+          body: finally_body,
+          line: finally_line,
+          column: finally_column
+        }
+      end
+
+      # Expect endtry
+      if current_token && current_token[:type] == :keyword && current_token[:value] == 'endtry'
+        advance # Skip 'endtry'
+      else
+        # Only add an error if we haven't reached the end of the file
+        if @position < @tokens.length
+          @errors << {
+            message: "Expected 'endtry' to close try statement",
+            position: @position,
+            line: current_token ? current_token[:line] : 0,
+            column: current_token ? current_token[:column] : 0
+          }
+        end
+      end
+
+      return {
+        type: :try_statement,
+        body: body,
+        catch_clauses: catch_clauses,
+        finally_clause: finally_clause,
+        line: line,
+        column: column
+      }
+    end
+
+    # Also add a method to parse throw statements:
+
+    def parse_throw_statement
+      token = advance # Skip 'throw'
+      line = token[:line]
+      column = token[:column]
+
+      # Parse the expression to throw
+      expression = parse_expression
+
+      return {
+        type: :throw_statement,
+        expression: expression,
+        line: line,
+        column: column
+      }
+    end
+
+
   end
 end
