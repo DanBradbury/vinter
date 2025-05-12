@@ -155,6 +155,34 @@ module Vinter
       if !current_token
         return nil
       end
+      start_token = current_token
+
+      # Handle pipe as command separator
+      if current_token[:type] == :operator && current_token[:value] == '|'
+        advance # Skip the pipe
+        return parse_statement
+      end
+
+      # Handle endif keyword outside normal if structure (likely from one-line if)
+      if current_token[:type] == :keyword && current_token[:value] == 'endif'
+        token = advance # Skip the endif
+        return {
+          type: :endif_marker,
+          line: token[:line],
+          column: token[:column]
+        }
+      end
+
+      # Add special cases for other ending keywords too to be thorough
+      if current_token[:type] == :keyword &&
+         ['endwhile', 'endfor', 'endfunction', 'endfunc', 'enddef'].include?(current_token[:value])
+        token = advance # Skip the keyword
+        return {
+          type: :"#{token[:value]}_marker",
+          line: token[:line],
+          column: token[:column]
+        }
+      end
 
       # Add case for mapping commands
       if current_token[:type] == :keyword &&
@@ -201,6 +229,7 @@ module Vinter
         when 'augroup'
           parse_augroup_statement
         else
+          #binding.pry
           @warnings << {
             message: "Unexpected keyword: #{current_token[:value]}",
             position: @position,
@@ -241,6 +270,7 @@ module Vinter
       elsif current_token[:type] == :percentage
         parse_range_command
       else
+        # binding.pry
         @warnings << {
           message: "Unexpected token type: #{current_token[:type]}",
           position: @position,
@@ -493,6 +523,7 @@ module Vinter
     end
 
     def parse_let_statement
+      # binding.pry
       token = advance # Skip 'let'
       line = token[:line]
       column = token[:column]
@@ -813,97 +844,91 @@ module Vinter
       then_branch = []
       else_branch = []
 
-      # Parse statements until we hit 'else', 'elseif', or 'endif'
-      while @position < @tokens.length
-        # Check for the tokens that would terminate this block
-        if current_token && current_token[:type] == :keyword &&
-           ['else', 'elseif', 'endif'].include?(current_token[:value])
-          break
-        end
+      # Check if this might be a one-line if (look ahead for pipe character)
+      one_line_if = false
 
-        # Before parsing a statement, save our position in case we need to backtrack
-        old_position = @position
-        old_errors_count = @errors.length
+      if current_token && current_token[:type] == :operator && current_token[:value] == '|'
+        one_line_if = true
+        advance # Skip the pipe
 
+        # Parse the then statement
         stmt = parse_statement
+        then_branch << stmt if stmt
 
-        # If parsing the statement added errors, there might be a mismatch or confusion
-        # between Vim control structures. Check for specific issues.
-        if @errors.length > old_errors_count
-          last_error = @errors.last
+        # Check for the closing pipe and endif
+        if current_token && current_token[:type] == :operator && current_token[:value] == '|'
+          advance # Skip the pipe
 
-          # If we expected 'endif' but didn't find it, we might be inside a nested control
-          # structure that was correctly closed but not recognized
-          if last_error[:message].include?("Expected 'endif'")
-            # Revert to before the statement and try to find the actual endif
-            @position = old_position
-            @errors.pop # Remove the error we're handling
-
-            # Skip ahead to find an endif, else, or elseif
-            while @position < @tokens.length
-              if current_token[:type] == :keyword &&
-                 ['endif', 'else', 'elseif'].include?(current_token[:value])
-                break
-              end
-              advance
-            end
-
-            # If we found one of our terminating keywords, break out
-            if current_token && current_token[:type] == :keyword &&
-               ['else', 'elseif', 'endif'].include?(current_token[:value])
-              break
-            end
+          # Expect endif
+          if current_token && current_token[:type] == :keyword && current_token[:value] == 'endif'
+            advance # Skip 'endif'
           else
-            # If it's a different kind of error, keep the statement and continue
-            then_branch << stmt if stmt
+            @errors << {
+              message: "Expected 'endif' after '|' in one-line if statement",
+              position: @position,
+              line: current_token ? current_token[:line] : 0,
+              column: current_token ? current_token[:column] : 0
+            }
           end
-        else
-          # No errors occurred, add the statement
+        end
+      else
+        # This is a regular multi-line if statement
+        # Continue with your existing logic for parsing normal if statements
+
+        # Parse statements until we hit 'else', 'elseif', or 'endif'
+        while @position < @tokens.length
+          # Check for the tokens that would terminate this block
+          if current_token && current_token[:type] == :keyword &&
+             ['else', 'elseif', 'endif'].include?(current_token[:value])
+            break
+          end
+
+          stmt = parse_statement
           then_branch << stmt if stmt
         end
-      end
 
-      # Check for else/elseif
-      if current_token && current_token[:type] == :keyword
-        if current_token[:value] == 'else'
-          advance # Skip 'else'
+        # Check for else/elseif
+        if current_token && current_token[:type] == :keyword
+          if current_token[:value] == 'else'
+            advance # Skip 'else'
 
-          # Parse statements until 'endif'
-          while @position < @tokens.length
-            if current_token[:type] == :keyword && current_token[:value] == 'endif'
-              break
+            # Parse statements until 'endif'
+            while @position < @tokens.length
+              if current_token[:type] == :keyword && current_token[:value] == 'endif'
+                break
+              end
+
+              stmt = parse_statement
+              else_branch << stmt if stmt
             end
+          elsif current_token[:value] == 'elseif'
+            elseif_stmt = parse_if_statement
+            else_branch << elseif_stmt if elseif_stmt
 
-            stmt = parse_statement
-            else_branch << stmt if stmt
+            return {
+              type: :if_statement,
+              condition: condition,
+              then_branch: then_branch,
+              else_branch: else_branch,
+              line: line,
+              column: column
+            }
           end
-        elsif current_token[:value] == 'elseif'
-          elseif_stmt = parse_if_statement
-          else_branch << elseif_stmt if elseif_stmt
-
-          return {
-            type: :if_statement,
-            condition: condition,
-            then_branch: then_branch,
-            else_branch: else_branch,
-            line: line,
-            column: column
-          }
         end
-      end
 
-      # Expect endif
-      if current_token && current_token[:type] == :keyword && current_token[:value] == 'endif'
-        advance # Skip 'endif'
-      else
-        # Don't add an error if we've already reached the end of the file
-        if @position < @tokens.length
-          @errors << {
-            message: "Expected 'endif' to close if statement",
-            position: @position,
-            line: current_token ? current_token[:line] : 0,
-            column: current_token ? current_token[:column] : 0
-          }
+        # Expect endif
+        if current_token && current_token[:type] == :keyword && current_token[:value] == 'endif'
+          advance # Skip 'endif'
+        else
+          # Don't add an error if we've already reached the end of the file
+          if @position < @tokens.length
+            @errors << {
+              message: "Expected 'endif' to close if statement",
+              position: @position,
+              line: current_token ? current_token[:line] : 0,
+              column: current_token ? current_token[:column] : 0
+            }
+          end
         end
       end
 
@@ -912,6 +937,7 @@ module Vinter
         condition: condition,
         then_branch: then_branch,
         else_branch: else_branch,
+        one_line: one_line_if,
         line: line,
         column: column
       }
@@ -1426,6 +1452,7 @@ module Vinter
     end
 
     def parse_expression
+      # binding.pry
       # Special case for empty return statements or standalone keywords that shouldn't be expressions
       if current_token && current_token[:type] == :keyword &&
          ['return', 'endif', 'endwhile', 'endfor', 'endfunction', 'endfunc'].include?(current_token[:value])
@@ -1455,7 +1482,7 @@ module Vinter
       expr = parse_binary_expression
 
       # Check if this is a ternary expression
-      if current_token && current_token[:type] == :operator && current_token[:value] == '?'
+      if current_token && (current_token[:type] == :question_mark || (current_token[:type] == :operator && current_token[:value] == '?'))
         question_token = advance # Skip '?'
 
         # Parse the "then" expression
@@ -2715,19 +2742,19 @@ module Vinter
     def parse_vim_lambda_or_dict(line, column)
       # Save current position to peek ahead
       start_position = @position
-      
+
       advance # Skip opening brace
-      
+
       # Check if this is a lambda by looking for parameter names followed by arrow
       is_lambda = false
       param_names = []
-      
+
       # Parse until closing brace or arrow
       while @position < @tokens.length && current_token[:type] != :brace_close
         if current_token[:type] == :identifier
           param_names << current_token[:value]
           advance
-          
+
           # Skip comma between parameters
           if current_token && current_token[:type] == :comma
             advance
@@ -2744,17 +2771,17 @@ module Vinter
           advance
         end
       end
-      
+
       # Reset position
       @position = start_position
-      
+
       if is_lambda
         return parse_vim_lambda(line, column)
       else
         return parse_dict_literal(line, column)
       end
     end
-    
+
     def parse_import_statement
       token = advance # Skip 'import'
       line = token[:line]
