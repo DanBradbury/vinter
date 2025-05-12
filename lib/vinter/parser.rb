@@ -227,7 +227,6 @@ module Vinter
       elsif current_token[:type] == :comment
         parse_comment
       elsif current_token[:type] == :string && current_token[:value].start_with?('"')
-        # binding.pry
         parse_comment
         # token = current_token
         # line = token[:line]
@@ -615,7 +614,7 @@ module Vinter
             column: bracket_token[:column]
           }
         else
-              @errors << {
+          @errors << {
             message: "Expected variable name after let",
             position: @position,
             line: current_token ? current_token[:line] : 0,
@@ -798,7 +797,6 @@ module Vinter
           })
         end
       end
-      # binding.pry
 
       # Now advance past the (potentially modified) current token
       advance
@@ -1428,11 +1426,29 @@ module Vinter
     end
 
     def parse_expression
-      # binding.pry
       # Special case for empty return statements or standalone keywords that shouldn't be expressions
       if current_token && current_token[:type] == :keyword &&
          ['return', 'endif', 'endwhile', 'endfor', 'endfunction', 'endfunc'].include?(current_token[:value])
         return nil
+      end
+
+      if current_token[:type] == :string
+        string_value = current_token[:value]
+        while current_token && peek_token && [:line_continuation, :identifier].include?(peek_token[:type])
+          # Handle strings with line continuation
+          if ["'", '"'].include? current_token[:value][-1]
+            return {
+              type: :literal,
+              value: string_value,
+              token_type: :string,
+              line: current_token[:line],
+              column: current_token[:column]
+            }
+          else
+            advance
+            string_value += current_token[:value]
+          end
+        end
       end
 
       # Parse the condition expression
@@ -1861,6 +1877,9 @@ module Vinter
           line: line,
           column: column
         }
+      when :line_continuation
+        advance
+        expr = parse_expression
       else
         @errors << {
           message: "Unexpected token in expression: #{token[:type]}",
@@ -2397,7 +2416,7 @@ module Vinter
       # Parse dictionary entries
       while current_token && current_token[:type] != :brace_close
         # Skip any backslash line continuation markers and whitespace
-        while current_token && (current_token[:type] == :backslash || current_token[:type] == :whitespace)
+        while current_token && (current_token[:type] == :backslash || current_token[:type] == :whitespace || current_token[:type] == :line_continuation)
           advance
         end
 
@@ -2466,6 +2485,7 @@ module Vinter
         found_comma = false
         while current_token && (current_token[:type] == :whitespace ||
                                current_token[:type] == :backslash ||
+                               current_token[:type] == :line_continuation ||
                                current_token[:type] == :comma)
           found_comma = true if current_token[:type] == :comma
           advance
@@ -2521,7 +2541,7 @@ module Vinter
       # Parse list elements
       while @position < @tokens.length
         # Handle line continuation characters (backslash)
-        if current_token && current_token[:type] == :backslash
+        if current_token && [:backslash, :line_continuation].include?(current_token[:type])
           # Skip the backslash token
           advance
 
@@ -2552,14 +2572,14 @@ module Vinter
           next
         else
           # If no comma and not a closing bracket or backslash, then it's an error
-          if current_token && current_token[:type] != :bracket_close
-            @errors << {
-              message: "Expected comma, backslash, or closing bracket after list element",
-              position: @position,
-              line: current_token[:line],
-              column: current_token[:column]
-            }
-          end
+          # if current_token && current_token[:type] != :bracket_close
+          #   @errors << {
+          #     message: "Expected comma, backslash, or closing bracket after list element",
+          #     position: @position,
+          #     line: current_token[:line],
+          #     column: current_token[:column]
+          #   }
+          # end
 
           # We still want to skip the closing bracket if it's there
           if current_token && current_token[:type] == :bracket_close

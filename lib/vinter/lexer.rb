@@ -362,13 +362,21 @@ module Vinter
         # Handle backslash for line continuation
         if chunk.start_with?('\\')
           @tokens << {
-            type: :backslash,
+            type: :line_continuation,
             value: '\\',
             line: @line_num,
             column: @column
           }
           @column += 1
           @position += 1
+
+          # If followed by a newline, advance to next line
+          if @position < @input.length && @input[@position] == "\n"
+            @line_num += 1
+            @column = 1
+            @position += 1
+          end
+
           next
         end
 

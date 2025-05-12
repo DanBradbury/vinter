@@ -29,6 +29,14 @@ RSpec.describe 'Integration Tests' do
     content = File.read(file_path)
     issues = linter.lint(content).select { |f| f[:type] == :error }
     #pp issues
+    expect(issues.size).to eq(0), issues.inspect
+  end
+
+  xit 'parses vimscript feature file without warnings' do
+    file_path = File.join(File.dirname(__FILE__), '..', 'fixtures', 'features.vim')
+    content = File.read(file_path)
+    issues = linter.lint(content).select { |f| f[:type] == :warning }
+    pp issues
     expect(issues.size).to eq(0)
   end
 
@@ -37,8 +45,7 @@ RSpec.describe 'Integration Tests' do
     content = File.read(file_path)
     issues = linter.lint(content).select { |f| f[:type] == :error }
     #pp issues
-    expect(issues.size).to eq(0)
-
+    expect(issues.size).to eq(0), issues.inspect
   end
 
   it 'correctly identifies issues in an invalid vim9 script file' do
@@ -53,5 +60,17 @@ RSpec.describe 'Integration Tests' do
     expect(issues.any? { |i| i[:rule] == "missing-type-annotation" }).to be true
     expect(issues.any? { |i| i[:rule] == "prefer-def-over-function" }).to be true
     expect(issues.any? { |i| i[:rule] == "missing-return-type" }).to be true
+  end
+
+  it 'handles backslash line continuations without warnings' do
+    content = <<-VIM
+let str_literal = "Line one
+            \\Line two
+            \\Line three"     " Multi-line string with line continuation
+    VIM
+
+    issues = linter.lint(content).select { |f| f[:type] == :warning }
+    pp issues
+    expect(issues.size).to eq(0), "Expected no issues, but found: #{issues.inspect}"
   end
 end
