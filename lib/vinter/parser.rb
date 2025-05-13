@@ -1705,6 +1705,9 @@ module Vinter
               column: column
             }
           end
+        elsif token[:value] == 'type' && current_token && (current_token[:type] == :paren_open || peek_token && peek_token[:type] == :paren_open)
+          # This is the type() function call
+          return parse_builtin_function_call(token[:value], line, column)
         elsif token[:value] == 'function'
           advance # Skip 'function'
           # Expect opening parenthesis
