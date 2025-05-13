@@ -264,6 +264,10 @@ module Vinter
           parse_echo_statement
         when 'augroup'
           parse_augroup_statement
+        when 'silent'
+          parse_silent_command
+        when 'call'
+          parse_call_statement
         else
           @warnings << {
             message: "Unexpected keyword: #{current_token[:value]}",
@@ -1864,6 +1868,21 @@ module Vinter
           line: line,
           column: column
         }
+      when :buffer_local
+        # Handle script-local variables/functions (like s:var)
+        advance
+
+        # Check if this is a function call
+        if current_token && current_token[:type] == :paren_open
+          return parse_function_call(token[:value], line, column)
+        end
+
+        expr = {
+          type: :buffer_local,
+          name: token[:value],
+          line: line,
+          column: column
+        }
       when :global_variable
         # Handle global variables (like g:var)
         advance
@@ -3457,6 +3476,61 @@ module Vinter
       }
     end
 
+    def parse_call_statement
+      token = advance # Skip 'call'
+      line = token[:line]
+      column = token[:column]
 
+      # Parse the function call expression that follows 'call'
+      func_expr = nil
+
+      if current_token && current_token[:type] == :script_local
+        # Handle script-local function call (s:func_name)
+        func_name = current_token[:value]
+        func_line = current_token[:line]
+        func_column = current_token[:column]
+        advance
+
+        # Parse arguments
+        args = []
+        if current_token && current_token[:type] == :paren_open
+          expect(:paren_open) # Skip '('
+
+          # Parse arguments if any
+          unless current_token && current_token[:type] == :paren_close
+            loop do
+              arg = parse_expression
+              args << arg if arg
+
+              if current_token && current_token[:type] == :comma
+                advance # Skip comma
+              else
+                break
+              end
+            end
+          end
+
+          expect(:paren_close) # Skip ')'
+        end
+
+        func_expr = {
+          type: :script_local_call,
+          name: func_name,
+          arguments: args,
+          line: func_line,
+          column: func_column
+        }
+      else
+        # For other function calls
+        func_expr = parse_expression
+      end
+
+      {
+        type: :call_statement,
+        expression: func_expr,
+        line: line,
+        column: column
+      }
+    end
   end
 end
