@@ -157,6 +157,19 @@ module Vinter
           next
         end
 
+        # Handle Vim scoped option variables with &l: or &g: prefix
+        if match = chunk.match(/\A&[lg]:[a-zA-Z_][a-zA-Z0-9_]*/)
+          @tokens << {
+            type: :scoped_option_variable,
+            value: match[0],
+            line: @line_num,
+            column: @column
+          }
+          @column += match[0].length
+          @position += match[0].length
+          next
+        end
+        
         # Handle Vim option variables with & prefix
         if match = chunk.match(/\A&[a-zA-Z_][a-zA-Z0-9_]*/)
           @tokens << {

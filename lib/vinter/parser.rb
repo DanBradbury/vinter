@@ -265,7 +265,6 @@ module Vinter
         when 'augroup'
           parse_augroup_statement
         else
-          #binding.pry
           @warnings << {
             message: "Unexpected keyword: #{current_token[:value]}",
             position: @position,
@@ -1693,16 +1692,19 @@ module Vinter
       # Add special handling for keywords that might appear in expressions
       when :keyword
         # Special handling for map-related keywords when they appear in expressions
-        if ['map', 'nmap', 'imap', 'vmap', 'xmap', 'noremap', 'nnoremap',
-             'inoremap', 'vnoremap', 'xnoremap', 'cnoremap', 'cmap'].include?(token[:value])
-          # Treat map commands as identifiers when inside expressions
-          advance
-          return {
-            type: :identifier,
-            name: token[:value],
-            line: line,
-            column: column
-          }
+        if ['map', 'nmap', 'imap', 'vmap', 'xmap', 'noremap', 'nnoremap', 'inoremap', 'vnoremap', 'xnoremap', 'cnoremap', 'cmap'].include?(token[:value])
+          if peek_token[:type] == :paren_open
+            parse_builtin_function_call(token[:value], line, column)
+          else
+            # Treat map commands as identifiers when inside expressions
+            advance
+            return {
+              type: :identifier,
+              name: token[:value],
+              line: line,
+              column: column
+            }
+          end
         elsif token[:value] == 'function'
           advance # Skip 'function'
           # Expect opening parenthesis
@@ -1827,6 +1829,14 @@ module Vinter
           line: line,
           column: column
         }
+      when :scoped_option_variable
+        advance
+        expr = {
+          type: :scoped_option_variable,
+          name: token[:value],
+          line: line,
+          column: column
+        }
       when :special_variable
         # Handle Vim special variables (like v:version)
         advance
@@ -1880,7 +1890,7 @@ module Vinter
         }
       when :identifier
         # Special handling for Vim built-in functions
-        if ['has', 'exists', 'empty', 'filter', 'get', 'type'].include?(token[:value])
+        if ['has', 'exists', 'empty', 'filter', 'get', 'type', 'map', 'copy'].include?(token[:value])
           return parse_builtin_function_call(token[:value], line, column)
         end
 
@@ -2129,6 +2139,10 @@ module Vinter
         # Parse arguments
         args = []
 
+        # Functions that take string expressions as code
+        special_functions = ['map', 'filter', 'reduce', 'sort', 'call', 'eval', 'execute']
+        is_special_function = special_functions.include?(name)
+
         # Parse until closing parenthesis
         while @position < @tokens.length && current_token && current_token[:type] != :paren_close
           # Skip whitespace or comments
@@ -2137,8 +2151,21 @@ module Vinter
             next
           end
 
-          arg = parse_expression
-          args << arg if arg
+          # Special handling for string arguments that contain code
+          if is_special_function &&
+             current_token && current_token[:type] == :string
+            string_token = parse_expression
+            args << {
+              type: :literal,
+              value: string_token[:value],
+              token_type: :string,
+              line: string_token[:line],
+              column: string_token[:column]
+            }
+          else
+            arg = parse_expression
+            args << arg if arg
+          end
 
           if current_token && current_token[:type] == :comma
             advance
@@ -2705,6 +2732,10 @@ module Vinter
 
       args = []
 
+      # Special handling for Vim functions that take code strings as arguments
+      special_functions = ['map', 'filter', 'reduce', 'sort', 'call', 'eval', 'execute']
+      is_special_function = special_functions.include?(name)
+
       # Parse arguments until we find a closing parenthesis
       while @position < @tokens.length && current_token && current_token[:type] != :paren_close
         # Skip comments inside parameter lists
@@ -2712,43 +2743,26 @@ module Vinter
           advance
           next
         end
-
-        # Parse the argument
-        arg = parse_expression
-        args << arg if arg
+        if is_special_function && current_token && current_token[:type] == :string
+          # For functions like map(), filter(), directly add the string as an argument
+          string_token = advance
+          args << {
+            type: :literal,
+            value: string_token[:value],
+            token_type: :string,
+            line: string_token[:line],
+            column: string_token[:column]
+          }
+        else
+          # Parse the argument
+          arg = parse_expression
+          args << arg if arg
+        end
 
         # Break if we hit the closing paren
         if current_token && current_token[:type] == :paren_close
           break
         end
-
-        # If we're not at a comma or closing parenthesis, look ahead to find the next one
-        if current_token &&
-           current_token[:type] != :comma &&
-           current_token[:type] != :paren_close
-
-          # Look ahead to see if there's a comma or closing parenthesis coming up
-          look_ahead_pos = @position
-          while look_ahead_pos < @tokens.length
-            next_token = @tokens[look_ahead_pos]
-            break if !next_token || next_token[:type] == :comma || next_token[:type] == :paren_close
-            look_ahead_pos += 1
-          end
-
-          # If we found a comma ahead, advance to it
-          if look_ahead_pos < @tokens.length && @tokens[look_ahead_pos][:type] == :comma
-            @position = look_ahead_pos
-            advance  # Skip the comma
-            next
-          end
-
-          # Otherwise advance to closing parenthesis if found
-          if look_ahead_pos < @tokens.length && @tokens[look_ahead_pos][:type] == :paren_close
-            @position = look_ahead_pos
-            next
-          end
-        end
-
         # If we have a comma, advance past it and continue
         if current_token && current_token[:type] == :comma
           advance

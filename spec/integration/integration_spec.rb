@@ -21,7 +21,7 @@ RSpec.describe 'Integration Tests' do
     issues = linter.lint(content).select { |f| f[:type] == :error }
     #pp issues
     # Temporarily disabled until we fully support all legacy Vim script syntax
-    expect(issues.size).to eq(0)
+    expect(issues.size).to eq(0), issues.inspect
   end
 
   it 'copilot_chat parsing' do
@@ -44,7 +44,7 @@ RSpec.describe 'Integration Tests' do
     file_path = File.join(File.dirname(__FILE__), '..', 'fixtures', 'features.vim')
     content = File.read(file_path)
     issues = linter.lint(content).select { |f| f[:type] == :error }
-    #pp issues
+    pp issues
     expect(issues.size).to eq(0), issues.inspect
   end
 
