@@ -19,7 +19,7 @@ RSpec.describe 'Integration Tests' do
     # In the future, this should be updated to properly validate legacy syntax
     # issues = linter.lint(content)
     issues = linter.lint(content).select { |f| f[:type] == :error }
-    pp issues
+    # pp issues
     # Temporarily disabled until we fully support all legacy Vim script syntax
     expect(issues.size).to eq(0), issues.inspect
   end
@@ -36,7 +36,7 @@ RSpec.describe 'Integration Tests' do
     file_path = File.join(File.dirname(__FILE__), '..', 'fixtures', 'features.vim')
     content = File.read(file_path)
     issues = linter.lint(content).select { |f| f[:type] == :warning }
-    pp issues
+    # pp issues
     expect(issues.size).to eq(0)
   end
 
@@ -44,7 +44,7 @@ RSpec.describe 'Integration Tests' do
     file_path = File.join(File.dirname(__FILE__), '..', 'fixtures', 'features.vim')
     content = File.read(file_path)
     issues = linter.lint(content).select { |f| f[:type] == :error }
-    pp issues
+    # pp issues
     expect(issues.size).to eq(0), issues.inspect
   end
 
@@ -66,7 +66,7 @@ RSpec.describe 'Integration Tests' do
     file_path = File.join(File.dirname(__FILE__), '..', 'fixtures', 'isolated.vim')
     content = File.read(file_path)
 
-    issues = linter.lint(content).select { |f| f[:type] == :warning }
+    issues = linter.lint(content).select { |f| [:error, :warning].include?(f[:type]) }
     pp issues
     expect(issues.size).to eq(0), "Expected no issues, but found: #{issues.inspect}"
   end

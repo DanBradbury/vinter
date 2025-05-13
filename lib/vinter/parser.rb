@@ -268,6 +268,8 @@ module Vinter
           parse_silent_command
         when 'call'
           parse_call_statement
+        when 'delete'
+          parse_delete_statement
         else
           @warnings << {
             message: "Unexpected keyword: #{current_token[:value]}",
@@ -309,7 +311,6 @@ module Vinter
       elsif current_token[:type] == :percentage
         parse_range_command
       else
-        # binding.pry
         @warnings << {
           message: "Unexpected token type: #{current_token[:type]}",
           position: @position,
@@ -319,42 +320,6 @@ module Vinter
         advance
         nil
       end
-    end
-
-    def parse_silent_command
-      token = advance # Skip 'silent!'
-      line = token[:line]
-      column = token[:column]
-
-      # Parse the command that follows silent!
-      command = parse_statement
-
-      {
-        type: :silent_command,
-        command: command,
-        line: line,
-        column: column
-      }
-    end
-
-    def parse_delete_command
-      token = advance # Skip 'delete'
-      line = token[:line]
-      column = token[:column]
-
-      # Check for register argument
-      register = nil
-      if current_token && current_token[:type] == :underscore
-        register = current_token[:value]
-        advance
-      end
-
-      {
-        type: :delete_command,
-        register: register,
-        line: line,
-        column: column
-      }
     end
 
     def parse_range_command
@@ -2767,7 +2732,7 @@ module Vinter
         end
         if is_special_function && current_token && current_token[:type] == :string
           # For functions like map(), filter(), directly add the string as an argument
-          string_token = advance
+          string_token = parse_string
           args << {
             type: :literal,
             value: string_token[:value],
@@ -3528,6 +3493,187 @@ module Vinter
       {
         type: :call_statement,
         expression: func_expr,
+        line: line,
+        column: column
+      }
+    end
+
+    def parse_string
+      # Start with the first string or expression
+      left = parse_primary_term
+
+      # Continue as long as we see the '.' or '..' string concatenation operator
+      while current_token && current_token[:type] == :operator &&
+            (current_token[:value] == '.' || current_token[:value] == '..')
+
+        # Store the operator token
+        op_token = advance # Skip the operator
+        op = op_token[:value]
+
+        # If this is the dot operator, check if it's actually part of '..'
+        if op == '.' && peek_token && peek_token[:type] == :operator && peek_token[:value] == '.'
+          advance # Skip the second dot
+          op = '..'
+        end
+
+        # Parse the right side of the concatenation
+        right = parse_primary_term
+
+        # Create a string concatenation expression
+        left = {
+          type: :string_concatenation,
+          operator: op,
+          left: left,
+          right: right,
+          line: op_token[:line],
+          column: op_token[:column]
+        }
+      end
+
+      return left
+    end
+
+    # Helper function to parse a primary term in string expressions
+    def parse_primary_term
+      if !current_token
+        return nil
+      end
+
+      token = current_token
+      line = token[:line]
+      column = token[:column]
+
+      case token[:type]
+      when :string
+        # Handle string literal
+        advance
+        return {
+          type: :literal,
+          value: token[:value],
+          token_type: :string,
+          line: line,
+          column: column
+        }
+      when :identifier, :global_variable, :script_local, :arg_variable,
+           :local_variable, :buffer_local, :window_local, :tab_local
+        # Handle variable references
+        advance
+        return {
+          type: token[:type],
+          name: token[:value],
+          line: line,
+          column: column
+        }
+      when :paren_open
+        # Handle parenthesized expressions
+        advance # Skip '('
+        expr = parse_expression
+        expect(:paren_close) # Skip ')'
+        return expr
+      when :function
+        # Handle function calls
+        return parse_function_call(token[:value], line, column)
+      else
+        # For anything else, use the standard expression parser
+        return parse_expression
+      end
+    end
+
+    def parse_silent_command
+      token = advance # Skip 'silent'
+      line = token[:line]
+      column = token[:column]
+
+      # Check for ! after silent
+      has_bang = false
+      if current_token && current_token[:type] == :operator && current_token[:value] == '!'
+        has_bang = true
+        advance # Skip '!'
+      end
+
+      # Now parse the command that follows silent
+      # It could be a standard command or a command with a range
+      command = nil
+
+      # Check if the next token is a range operator (% in this case)
+      if current_token && current_token[:type] == :operator && current_token[:value] == '%'
+        range_token = advance # Skip '%'
+
+        # Now we expect a command (like 'delete')
+        if current_token &&
+           (current_token[:type] == :keyword || current_token[:type] == :identifier)
+          cmd_token = advance # Skip the command name
+          cmd_name = cmd_token[:value]
+
+          # Parse any arguments to the command
+          args = []
+          while current_token &&
+                current_token[:type] != :comment &&
+                (current_token[:value] != "\n" ||
+                 (current_token[:value] == "\n" &&
+                  !current_token[:value].start_with?("\\")))
+
+            # Add the token as an argument
+            args << current_token
+            advance
+          end
+
+          command = {
+            type: :range_command,
+            range: '%',
+            command: {
+              type: :command,
+              name: cmd_name,
+              args: args,
+              line: cmd_token[:line],
+              column: cmd_token[:column]
+            },
+            line: range_token[:line],
+            column: range_token[:column]
+          }
+        else
+          @errors << {
+            message: "Expected command after range operator '%'",
+            position: @position,
+            line: current_token ? current_token[:line] : range_token[:line],
+            column: current_token ? current_token[:column] : range_token[:column] + 1
+          }
+        end
+      else
+        # Parse a regular command
+        command = parse_statement
+      end
+
+      return {
+        type: :silent_command,
+        has_bang: has_bang,
+        command: command,
+        line: line,
+        column: column
+      }
+    end
+
+    def parse_delete_command
+      token = advance # Skip 'delete'
+      line = token[:line]
+      column = token[:column]
+
+      # Check for register argument (could be an underscore '_')
+      register = nil
+      if current_token
+        if current_token[:type] == :identifier && current_token[:value] == '_'
+          register = current_token[:value]
+          advance
+        elsif current_token[:type] == :operator && current_token[:value] == '_'
+          # Handle underscore as an operator (some lexers might classify it this way)
+          register = current_token[:value]
+          advance
+        end
+      end
+
+      return {
+        type: :delete_command,
+        register: register,
         line: line,
         column: column
       }

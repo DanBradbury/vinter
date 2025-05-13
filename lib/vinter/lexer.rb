@@ -38,17 +38,28 @@ module Vinter
       @column = 1
     end
 
+    def find_unescaped_newline(chunk)
+      i = 0
+      while i < chunk.length
+        if chunk[i] == "\n" && (i == 0 || chunk[i - 1] != '\\')
+          return i
+        end
+        i += 1
+      end
+      nil # Return nil if no unescaped newline is found
+    end
+
     def tokenize
       until @position >= @input.length
         chunk = @input[@position..-1]
 
         # First check if the line starts with a quote (comment in Vim)
-        current_line_start = @input.rindex("\n", @position) || 0
+        current_line_start = chunk.index("\n") || 0
         current_line_start += 1 if @input[current_line_start] == "\n"
         # If we're at the start of a line and it begins with a quote
-        if @position == current_line_start && chunk.start_with?('"')
+        if (@position <= current_line_start) && chunk.start_with?('"')
           # Find the end of the line
-          line_end = chunk.index("\n") || chunk.length
+          line_end = find_unescaped_newline(chunk) || chunk.length
           comment_text = chunk[0...line_end]
 
           @tokens << {
