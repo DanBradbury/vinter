@@ -2,7 +2,7 @@ module Vinter
   class Lexer
     TOKEN_TYPES = {
       # Vim9 specific keywords
-      keyword: /\b(if|else|elseif|endif|while|endwhile|for|endfor|def|enddef|function|endfunction|endfunc|return|const|var|final|import|export|class|extends|static|enum|type|vim9script|abort|autocmd|echom|echoerr|echohl|echomsg|let|execute|continue|break|try|catch|finally|endtry|throw|runtime|silent|delete|command|call|nnoremap|nmap|inoremap|imap|vnoremap|vmap|xnoremap|xmap|cnoremap|cmap|noremap|map)\b/,
+      keyword: /\b(if|else|elseif|endif|while|endwhile|for|endfor|def|enddef|function|endfunction|endfunc|return|const|var|final|import|export|class|extends|static|enum|type|vim9script|abort|autocmd|echom|echoerr|echohl|echomsg|let|execute|continue|break|try|catch|finally|endtry|throw|runtime|silent|delete|command|call|set|nnoremap|nmap|inoremap|imap|vnoremap|vmap|xnoremap|xmap|cnoremap|cmap|noremap|map)\b/,
       # Identifiers can include # and special characters
       identifier: /\b[a-zA-Z_][a-zA-Z0-9_#]*\b/,
       # Single-character operators

@@ -270,6 +270,8 @@ module Vinter
           parse_call_statement
         when 'delete'
           parse_delete_statement
+        when 'set'
+          parse_set_command
         else
           @warnings << {
             message: "Unexpected keyword: #{current_token[:value]}",
@@ -311,6 +313,7 @@ module Vinter
       elsif current_token[:type] == :percentage
         parse_range_command
       else
+        # binding.pry
         @warnings << {
           message: "Unexpected token type: #{current_token[:type]}",
           position: @position,
@@ -515,6 +518,7 @@ module Vinter
       # Just accept any tokens until we hit a statement terminator or another command
       expressions = []
       expr = parse_expression
+      #expr = parse_string
       expressions << expr if expr
 
       # Return the execute statement
@@ -1314,7 +1318,7 @@ module Vinter
     end
 
     def parse_type
-      if current_token && current_token[:type] == :identifier
+      if current_token && [:identifier, :keyword].include?(current_token[:type])
         type_name = advance
 
         # Handle generic types like list<string>
@@ -2241,7 +2245,7 @@ module Vinter
           # There might be a return type annotation
           advance
           # Skip the type
-          advance if current_token && current_token[:type] == :identifier
+          advance if current_token && [:identifier, :keyword].include?(current_token[:type])
           # Check for the arrow
           has_arrow = current_token && current_token[:type] == :operator && current_token[:value] == '=>'
         end
@@ -3674,6 +3678,97 @@ module Vinter
       return {
         type: :delete_command,
         register: register,
+        line: line,
+        column: column
+      }
+    end
+
+    def parse_set_command
+      token = advance # Skip 'set'
+      line = token[:line]
+      column = token[:column]
+
+      # Parse option name
+      option_name = nil
+      if current_token && current_token[:type] == :identifier
+        option_name = current_token[:value]
+        advance
+      elsif current_token && current_token[:type] == :option_variable
+        # Handle option variable directly (like &option)
+        option_name = current_token[:value].sub(/^&/, '')
+        advance
+      else
+        @errors << {
+          message: "Expected option name after 'set'",
+          position: @position,
+          line: current_token ? current_token[:line] : line,
+          column: current_token ? current_token[:column] : column + 3
+        }
+        return {
+          type: :set_command,
+          option: nil,
+          value: nil,
+          reset_to_vim_default: false,
+          line: line,
+          column: column
+        }
+      end
+
+      # Check for &vim suffix (reset to Vim default)
+      reset_to_vim_default = false
+      if current_token && current_token[:type] == :option_variable &&
+         (current_token[:value] == '&vim' || current_token[:value] == '&')
+        reset_to_vim_default = true
+        advance
+      end
+
+      # Check for equals sign and value
+      value = nil
+      if current_token && current_token[:type] == :operator && current_token[:value] == '='
+        advance # Skip '='
+        value = parse_expression
+      elsif current_token && current_token[:type] == :operator && current_token[:value] == '-'
+        # Handle syntaxes like 'set option-=value'
+        op = current_token[:value]
+        advance # Skip the operator
+
+        if current_token && current_token[:type] == :operator &&
+           ['+', '=', '^'].include?(current_token[:value])
+          op += current_token[:value]
+          advance # Skip the second part of the operator
+        end
+
+        value = {
+          type: :option_operation,
+          operator: op,
+          value: parse_expression,
+          line: line,
+          column: column
+        }
+      elsif current_token && current_token[:type] == :operator && current_token[:value] == '+'
+        # Handle syntaxes like 'set option+=value'
+        op = current_token[:value]
+        advance # Skip the operator
+
+        if current_token && current_token[:type] == :operator && current_token[:value] == '='
+          op += current_token[:value]
+          advance # Skip the '=' part
+        end
+
+        value = {
+          type: :option_operation,
+          operator: op,
+          value: parse_expression,
+          line: line,
+          column: column
+        }
+      end
+
+      return {
+        type: :set_command,
+        option: option_name,
+        value: value,
+        reset_to_vim_default: reset_to_vim_default,
         line: line,
         column: column
       }
