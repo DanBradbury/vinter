@@ -1,7 +1,12 @@
+require "yaml"
+
 module Vinter
   class Linter
-    def initialize
+    def initialize(config_path: nil)
       @rules = []
+      @ignored_rules = []
+      @config_path = config_path || find_config_path
+      load_config
       register_default_rules
     end
 
@@ -121,8 +126,9 @@ module Vinter
         }
       end
 
-      # Apply rules
+      # Apply rules, ignoring those specified in config
       @rules.each do |rule|
+        next if @ignored_rules.include?(rule.id)
         rule_issues = rule.apply(result[:ast])
         issues.concat(rule_issues.map { |i| {
           type: :rule,
@@ -134,6 +140,25 @@ module Vinter
       end
 
       issues
+    end
+
+    private
+
+    def find_config_path
+      # check for project level config
+      project_config = Dir.glob(".vinter{.yaml,.yml,}").first
+      project_config if project_config
+
+      # check for user-level config
+      user_config = File.expand_path("~/.vinter")
+      user_config if File.exist?(user_config)
+    end
+
+    def load_config
+      return unless @config_path && File.exist?(@config_path)
+
+      config = YAML.load_file(@config_path)
+      @ignored_rules = config["ignore_rules"] || []
     end
   end
 

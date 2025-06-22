@@ -2,19 +2,23 @@
 
 A Ruby gem that provides linting capabilities for Vim9 script files. This linter helps identify syntax errors and enforce best practices for for Vim9 script.
 
-## Features
-
-- Lexical analysis of Vim9 script syntax
-- Parsing of Vim9 script constructs
-- Detection of common errors and code smells
-- Command-line interface for easy integration with editors
-
 ## Installation
 
 Install the gem:
 
 ```bash
 gem install vinter
+```
+
+## Configure
+Vinter will read config files on the following priority order
+- User config (`~/.vinter`)
+- Project config (`path/to/proj/.vinter`)
+
+```yaml
+ignore_rules:
+  - missing-vim9script-declaration
+  - prefer-def-over-function
 ```
 
 ## Usage
