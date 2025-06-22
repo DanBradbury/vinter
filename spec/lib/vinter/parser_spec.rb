@@ -10,7 +10,6 @@ RSpec.describe Vinter::Parser do
       result = parser.parse
 
       ast = result[:ast]
-      print_ast(ast)
       expect(result[:ast][:type]).to eq(:program)
       expect(result[:ast][:body].size).to eq(1)
       expect(result[:ast][:body][0][:type]).to eq(:let_statement)
@@ -58,7 +57,6 @@ RSpec.describe Vinter::Parser do
       tokens = lexer.tokenize
       parser = described_class.new(tokens)
       result = parser.parse
-      # puts result.inspect
 
       expect(result[:ast][:type]).to eq(:program)
       expect(result[:ast][:body].size).to eq(1)
@@ -83,8 +81,6 @@ RSpec.describe Vinter::Parser do
       tokens = lexer.tokenize
       parser = described_class.new(tokens)
       result = parser.parse
-      puts result[:ast].inspect
-      print_ast(result[:ast])
 
       expect(result[:ast][:type]).to eq(:program)
       expect(result[:ast][:body].size).to eq(1)
@@ -103,7 +99,6 @@ RSpec.describe Vinter::Parser do
       tokens = lexer.tokenize
       parser = described_class.new(tokens)
       result = parser.parse
-      # puts result[:ast].inspect
 
       expect(result[:ast][:type]).to eq(:program)
       expect(result[:ast][:body].size).to eq(1)
@@ -116,7 +111,6 @@ RSpec.describe Vinter::Parser do
       tokens = lexer.tokenize
       parser = described_class.new(tokens)
       result = parser.parse
-      # puts result[:ast].inspect
 
       expect(result[:ast][:type]).to eq(:program)
       expect(result[:ast][:body].size).to eq(1)
@@ -135,7 +129,6 @@ RSpec.describe Vinter::Parser do
       tokens = lexer.tokenize
       parser = described_class.new(tokens)
       result = parser.parse
-      # puts result[:ast].inspect
 
       expect(result[:ast][:type]).to eq(:program)
       expect(result[:ast][:body].size).to eq(1)
@@ -148,7 +141,6 @@ RSpec.describe Vinter::Parser do
       tokens = lexer.tokenize
       parser = described_class.new(tokens)
       result = parser.parse
-      # puts result[:ast].inspect
 
       expect(result[:ast][:type]).to eq(:program)
       expect(result[:ast][:body].size).to eq(1)
@@ -161,7 +153,6 @@ RSpec.describe Vinter::Parser do
       tokens = lexer.tokenize
       parser = described_class.new(tokens)
       result = parser.parse
-      # puts result[:ast].inspect
 
       expect(result[:ast][:type]).to eq(:program)
       expect(result[:ast][:body].size).to eq(1)
@@ -178,7 +169,6 @@ RSpec.describe Vinter::Parser do
       tokens = lexer.tokenize
       parser = described_class.new(tokens)
       result = parser.parse
-      # puts result[:ast].inspect
 
       expect(result[:ast][:type]).to eq(:program)
       expect(result[:ast][:body].size).to eq(1)
@@ -343,8 +333,6 @@ RSpec.describe Vinter::Parser do
       tokens = lexer.tokenize
       parser = described_class.new(tokens)
       result = parser.parse
-      puts result[:ast].inspect
-      print_ast(result[:ast])
 
       expect(result[:ast][:body][0][:type]).to eq(:filter_command)
     end
@@ -355,8 +343,6 @@ RSpec.describe Vinter::Parser do
       tokens = lexer.tokenize
       parser = described_class.new(tokens)
       result = parser.parse
-      puts result[:ast].inspect
-      print_ast(result[:ast])
 
       expect(result[:ast][:body][0][:type]).to eq(:filter_command)
     end
@@ -374,7 +360,6 @@ RSpec.describe Vinter::Parser do
       tokens = lexer.tokenize
       parser = described_class.new(tokens)
       result = parser.parse
-      #puts result[:ast].inspect
 
       expect(result[:ast][:type]).to eq(:program)
       expect(result[:ast][:body].size).to eq(1)
@@ -391,7 +376,6 @@ RSpec.describe Vinter::Parser do
       tokens = lexer.tokenize
       parser = described_class.new(tokens)
       result = parser.parse
-      #puts result[:ast].inspect
 
       expect(result[:ast][:type]).to eq(:program)
       expect(result[:ast][:body].size).to eq(1)

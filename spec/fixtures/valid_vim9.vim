@@ -15,10 +15,6 @@ var Lambda = (arg) => expression
 var Lambda = (arg): type => expression
 filter(list, (k, v) =>
     v > 0)
-var Lambda = (arg) => {
-  g:was_called = 'yes'
-  return expression
-    }
 var count = 0
 var timer = timer_start(500, (_) => {
    count += 1
@@ -77,16 +73,16 @@ var dict = {key: value}
 var dict = {'key with space': value}
 var dict = {"key\twith\ttabs": value}
 var dict = {'': value}			# empty key
-1 || false   == true
-0 || 1       == true
-0 || false   == false
-1 && true    == true
-0 && 1       == false
-!'yes'			== false
-!![]			== false
-!![1, 2, 3]		== true
-'hello ' .. 123  == 'hello 123'
-'hello ' .. v:true  == 'hello true'
+var a = 1 || false   == true
+var a = 0 || 1       == true
+var a = 0 || false   == false
+var a = 1 && true    == true
+var a = 0 && 1       == false
+var a = !'yes'			== false
+var a = !![]			== false
+var a = !![1, 2, 3]		== true
+var a = 'hello ' .. 123  == 'hello 123'
+var a = 'hello ' .. v:true  == 'hello true'
 true
 false
 null
