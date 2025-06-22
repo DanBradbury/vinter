@@ -256,7 +256,7 @@ module Vinter
           { type: :vim9script_declaration, line: token[:line], column: token[:column] }
         when 'autocmd'
           parse_autocmd_statement
-        when 'execute'
+        when 'execute', 'exec'
           parse_execute_statement
         when 'let'
           parse_let_statement
@@ -313,7 +313,6 @@ module Vinter
       elsif current_token[:type] == :percentage
         parse_range_command
       else
-        # binding.pry
         @warnings << {
           message: "Unexpected token type: #{current_token[:type]}",
           position: @position,
@@ -375,6 +374,39 @@ module Vinter
     end
 
     def parse_filter_command
+      token = advance # Skip 'execute'
+      line = token[:line]
+      column = token[:column]
+      # lets count the parens that are created as we parse through the filter command
+      expect(:paren_open)
+      open_parens = 1
+      while open_parens > 0
+        advance
+        if current_token[:type] == :paren_open
+          open_parens += 1
+        elsif current_token[:type] == :paren_close
+          open_parens -= 1
+        end
+      end
+      advance
+
+      # Parse arguments - typically string expressions with concatenation
+      # Just accept any tokens until we hit a statement terminator or another command
+      #expressions = []
+      #expr = parse_expression
+      #expr = parse_string
+      #expressions << expr if expr
+
+      # Return the execute statement
+      {
+        type: :filter_command,
+        #expressions: expressions,
+        line: line,
+        column: column
+      }
+    end
+
+    def old_parse_filter_command
       token = advance # Skip 'filter' or 'filt'
       line = token[:line]
       column = token[:column]
@@ -424,7 +456,7 @@ module Vinter
           # Don't consume tokens that likely belong to the command part
           if current_token[:type] == :keyword ||
              (current_token[:type] == :identifier &&
-              ['echo', 'let', 'execute', 'autocmd', 'au', 'oldfiles', 'clist', 'command',
+              ['echo', 'let', 'execute', 'exec', 'autocmd', 'au', 'oldfiles', 'clist', 'command',
                'files', 'highlight', 'jumps', 'list', 'llist', 'marks', 'registers', 'set'].include?(current_token[:value]))
             break
           end
@@ -1881,7 +1913,7 @@ module Vinter
         }
       when :identifier
         # Special handling for Vim built-in functions
-        if ['has', 'exists', 'empty', 'filter', 'get', 'type', 'map', 'copy'].include?(token[:value])
+        if ['has', 'exists', 'empty', 'get', 'type', 'map', 'copy'].include?(token[:value])
           return parse_builtin_function_call(token[:value], line, column)
         end
 
@@ -2131,7 +2163,7 @@ module Vinter
         args = []
 
         # Functions that take string expressions as code
-        special_functions = ['map', 'filter', 'reduce', 'sort', 'call', 'eval', 'execute']
+        special_functions = ['map', 'reduce', 'sort', 'call', 'eval', 'execute', 'exec']
         is_special_function = special_functions.include?(name)
 
         # Parse until closing parenthesis
@@ -2724,7 +2756,7 @@ module Vinter
       args = []
 
       # Special handling for Vim functions that take code strings as arguments
-      special_functions = ['map', 'filter', 'reduce', 'sort', 'call', 'eval', 'execute']
+      special_functions = ['map', 'reduce', 'sort', 'call', 'eval', 'execute', 'exec']
       is_special_function = special_functions.include?(name)
 
       # Parse arguments until we find a closing parenthesis

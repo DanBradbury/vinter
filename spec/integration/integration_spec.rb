@@ -6,7 +6,7 @@ RSpec.describe 'Integration Tests' do
   it 'correctly lints a valid vim9 script file' do
     file_path = File.join(File.dirname(__FILE__), '..', 'fixtures', 'valid_vim9.vim')
     content = File.read(file_path)
-    issues = linter.lint(content).select { |f| f[:type] == :error }
+    issues = linter.lint(content).select { |f| [:error, :warning].include?(f[:type]) }
 
     expect(issues.size).to eq(0), issues.inspect
   end
@@ -14,11 +14,11 @@ RSpec.describe 'Integration Tests' do
   it 'correctly lints a legacy vim script file' do
     file_path = File.join(File.dirname(__FILE__), '..', 'fixtures', 'legacy.vim')
     content = File.read(file_path)
-    
+
     # For now, just verify that the linter doesn't crash on legacy scripts
     # In the future, this should be updated to properly validate legacy syntax
     # issues = linter.lint(content)
-    issues = linter.lint(content).select { |f| f[:type] == :error }
+    issues = linter.lint(content).select { |f| [:error, :warning].include?(f[:type]) }
     # pp issues
     # Temporarily disabled until we fully support all legacy Vim script syntax
     expect(issues.size).to eq(0), issues.inspect
@@ -27,7 +27,7 @@ RSpec.describe 'Integration Tests' do
   it 'copilot_chat parsing' do
     file_path = File.join(File.dirname(__FILE__), '..', 'fixtures', 'copilot_chat.vim')
     content = File.read(file_path)
-    issues = linter.lint(content).select { |f| f[:type] == :error }
+    issues = linter.lint(content).select { |f| [:error, :warning].include?(f[:type]) }
     #pp issues
     expect(issues.size).to eq(0), issues.inspect
   end
@@ -35,7 +35,7 @@ RSpec.describe 'Integration Tests' do
   it 'parses vimscript feature file without warnings' do
     file_path = File.join(File.dirname(__FILE__), '..', 'fixtures', 'features.vim')
     content = File.read(file_path)
-    issues = linter.lint(content).select { |f| f[:type] == :warning }
+    issues = linter.lint(content).select { |f| [:error, :warning].include?(f[:type]) }
     # pp issues
     expect(issues.size).to eq(0)
   end
@@ -43,7 +43,7 @@ RSpec.describe 'Integration Tests' do
   it 'parses vimscript feature file' do
     file_path = File.join(File.dirname(__FILE__), '..', 'fixtures', 'features.vim')
     content = File.read(file_path)
-    issues = linter.lint(content).select { |f| f[:type] == :error }
+    issues = linter.lint(content).select { |f| [:error, :warning].include?(f[:type]) }
     # pp issues
     expect(issues.size).to eq(0), issues.inspect
   end

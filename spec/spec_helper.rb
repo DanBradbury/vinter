@@ -24,3 +24,34 @@ RSpec.configure do |config|
   Kernel.srand config.seed
 end
 
+def print_ast(ast)
+  if ast.include?(:name)
+    puts "#{ast[:type]} = #{ast[:name]}"
+  else
+    puts ast[:type]
+  end
+  if ast.include?(:body)
+    ast[:body].each do |e|
+      if e.include?(:body)
+        print_ast(e)
+      else
+        puts "|-> #{e[:type]}"
+        if e.include?(:target)
+          puts "|-> target (#{e[:target][:type]} = #{e[:target][:name]})"
+        end
+
+        if e.include?(:operator)
+          puts "|-> operator #{e[:operator]}"
+        end
+
+        if e.include?(:value)
+          puts "|-> value #{e[:value][:type]} #{e[:value][:value]} (#{e[:value][:token_type]})"
+        end
+        if e.include?(:condition)
+          puts "|-> condition #{e[:condition]}"
+        end
+      end
+    end
+  end
+end
+
