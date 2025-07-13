@@ -1,13 +1,15 @@
+# frozen_string_literal: true
+
 module Vinter
   class Lexer
     TOKEN_TYPES = {
       # Identifiers can include # and special characters
       identifier: /\b[a-zA-Z_][a-zA-Z0-9_#]*\b/,
       # Single-character operators
-      operator: /[\+\-\*\/=%<>!&\|\.]/,
+      operator: %r{[+\-*/=%<>!&|.]},
       # Multi-character operators handled separately
       number: /\b(0[xX][0-9A-Fa-f]+|0[oO][0-7]+|0[bB][01]+|\d+(\.\d+)?([eE][+-]?\d+)?)\b/,
-      register_access: /@[a-zA-Z0-9":.%#=*+~_\/\-]/,
+      register_access: %r{@[a-zA-Z0-9":.%#=*+~_/-]},
       # Vim9 comments use #
       comment: /(#|").*/,
       whitespace: /\s+/,
@@ -22,12 +24,13 @@ module Vinter
       comma: /,/,
       backslash: /\\/,
       question_mark: /\?/,
-      command_separator: /\|/,
-    }
+      command_separator: /\|/
+    }.freeze
 
-    CONTINUATION_OPERATORS = %w(. .. + - * / = == ==# ==? != > < >= <= && || ? : -> =>)
+    CONTINUATION_OPERATORS = %w[. .. + - * / = == ==# ==? != > < >= <= && || ? : -> =>].freeze
     SILENT_BANG_LENGTH = 7
     ELLIPSIS_LENGTH = 3
+    FUNCTION_KEYWORD_LENGTH = 8
 
     # Mapping of prefixes to their token types
     SCOPED_VARIABLE_PATTERNS = {
@@ -38,7 +41,7 @@ module Vinter
       't:' => :tab_local,
       'g:' => :global_variable,
       'l:' => :local_variable
-    }
+    }.freeze
 
     def initialize(input)
       @input = input
@@ -51,9 +54,8 @@ module Vinter
     def find_unescaped_newline(chunk)
       i = 0
       while i < chunk.length
-        if chunk[i] == "\n" && (i == 0 || chunk[i - 1] != '\\')
-          return i
-        end
+        return i if chunk[i] == "\n" && (i.zero? || chunk[i - 1] != '\\')
+
         i += 1
       end
       nil # Return nil if no unescaped newline is found
@@ -61,11 +63,11 @@ module Vinter
 
     def try_match_scoped_variable(chunk)
       SCOPED_VARIABLE_PATTERNS.each do |prefix, token_type|
-        if match = chunk.match(/\A#{Regexp.escape(prefix)}[a-zA-Z_][a-zA-Z0-9_]*/)
-          add_token(token_type, match[0])
-          advance_position(match[0].length)
-          return true
-        end
+        next unless (match = chunk.match(/\A#{Regexp.escape(prefix)}[a-zA-Z_][a-zA-Z0-9_]*/))
+
+        add_token(token_type, match[0])
+        advance_position(match[0].length)
+        return true
       end
       false
     end
@@ -122,7 +124,7 @@ module Vinter
 
             if char == '\\' && !escaped
               escaped = true
-            elsif (char == "\n" or char == quote) && !escaped
+            elsif ((char == "\n") || (char == quote)) && !escaped
               # Found closing quote
               break
             elsif escaped
@@ -191,21 +193,21 @@ module Vinter
         end
 
         # Check for keywords first, before other token types
-        if match = chunk.match(/\A\b(if|else|elseif|endif|while|endwhile|for|endfor|def|enddef|function|endfunction|endfunc|return|const|var|final|import|export|class|extends|static|enum|type|vim9script|abort|autocmd|echoerr|echohl|echomsg|let|execute)\b/)
+        if (match = chunk.match(/\A\b(if|else|elseif|endif|while|endwhile|for|endfor|def|enddef|function|endfunction|endfunc|return|const|var|final|import|export|class|extends|static|enum|type|vim9script|abort|autocmd|echoerr|echohl|echomsg|let|execute)\b/))
           add_token(:keyword, match[0])
           advance_position(match[0].length)
           next
         end
 
         # Handle Vim scoped option variables with &l: or &g: prefix
-        if match = chunk.match(/\A&[lg]:[a-zA-Z_][a-zA-Z0-9_]*/)
+        if (match = chunk.match(/\A&[lg]:[a-zA-Z_][a-zA-Z0-9_]*/))
           add_token(:scoped_option_variable, match[0])
           advance_position(match[0].length)
           next
         end
-        
+
         # Handle Vim option variables with & prefix
-        if match = chunk.match(/\A&[a-zA-Z_][a-zA-Z0-9_]*/)
+        if (match = chunk.match(/\A&[a-zA-Z_][a-zA-Z0-9_]*/))
           add_token(:option_variable, match[0])
           advance_position(match[0].length)
           next
@@ -215,21 +217,21 @@ module Vinter
         next if try_match_scoped_variable(chunk)
 
         # Handle argument variables with a: prefix (both named and numbered)
-        if match = chunk.match(/\Aa:[a-zA-Z_][a-zA-Z0-9_]*/) || match = chunk.match(/\Aa:[A-Z0-9]/)
+        if (match = chunk.match(/\Aa:[a-zA-Z_][a-zA-Z0-9_]*/) || (match = chunk.match(/\Aa:[A-Z0-9]/)))
           add_token(:arg_variable, match[0])
           advance_position(match[0].length)
           next
         end
 
         # Handle local variables with l: prefix
-        if match = chunk.match(/\Al:[a-zA-Z_][a-zA-Z0-9_]*/)
+        if (match = chunk.match(/\Al:[a-zA-Z_][a-zA-Z0-9_]*/))
           add_token(:local_variable, match[0])
           advance_position(match[0].length)
           next
         end
 
         # Add support for standalone namespace prefixes (like g:)
-        if match = chunk.match(/\A([sgbwtal]):/)
+        if (match = chunk.match(/\A([sgbwtal]):/))
           @tokens << {
             type: :namespace_prefix,
             value: match[0],
@@ -242,7 +244,7 @@ module Vinter
         end
 
         # Handle compound assignment operators
-        if match = chunk.match(/\A(\+=|-=|\*=|\/=|\.\.=|\.=)/)
+        if (match = chunk.match(%r{\A(\+=|-=|\*=|/=|\.\.=|\.=)}))
           @tokens << {
             type: :compound_operator,
             value: match[0],
@@ -256,41 +258,23 @@ module Vinter
 
         # Handle ellipsis for variable args
         if chunk.start_with?('...')
-          @tokens << {
-            type: :ellipsis,
-            value: '...',
-            line: @line_num,
-            column: @column
-          }
-          @column += ELLIPSIS_LENGTH
-          @position += ELLIPSIS_LENGTH
+          add_token(:ellipsis, '...')
+          advance_position(ELLIPSIS_LENGTH)
           next
         end
 
         # Handle multi-character operators explicitly
-        if match = chunk.match(/\A(=~#|=~\?|=~|!~#|!~\?|!~|==#|==\?|==|!=#|!=\?|!=|=>\?|=>|>=#|>=\?|>=|<=#|<=\?|<=|->#|->\?|->|\.\.|\|\||&&)/)
-          @tokens << {
-            type: :operator,
-            value: match[0],
-            line: @line_num,
-            column: @column
-          }
-          @column += match[0].length
-          @position += match[0].length
+        if (match = chunk.match(/\A(=~#|=~\?|=~|!~#|!~\?|!~|==#|==\?|==|!=#|!=\?|!=|=>\?|=>|>=#|>=\?|>=|<=#|<=\?|<=|->#|->\?|->|\.\.|\|\||&&)/))
+          add_token(:operator, match[0])
+          advance_position(match[0].length)
           next
         end
 
         # Handle register access (@a, @", etc.)
-        if chunk =~ /\A@[a-zA-Z0-9":.%#=*+~_\/\-]/
-          register_token = chunk.match(/\A@[a-zA-Z0-9":.%#=*+~_\/\-]/)[0]
-          @tokens << {
-            type: :register_access,
-            value: register_token,
-            line: @line_num,
-            column: @column
-          }
-          @column += register_token.length
-          @position += register_token.length
+        if chunk =~ %r{\A@[a-zA-Z0-9":.%#=*+~_/-]}
+          register_token = chunk.match(%r{\A@[a-zA-Z0-9":.%#=*+~_/-]})[0]
+          add_token(:register_access, register_token)
+          advance_position(register_token.length)
           next
         end
 
@@ -314,7 +298,7 @@ module Vinter
         end
 
         # Skip whitespace but track position
-        if match = chunk.match(/\A(\s+)/)
+        if (match = chunk.match(/\A(\s+)/))
           whitespace = match[0]
           whitespace.each_char do |c|
             if c == "\n"
@@ -330,12 +314,7 @@ module Vinter
 
         # Handle backslash for line continuation
         if chunk.start_with?('\\')
-          @tokens << {
-            type: :line_continuation,
-            value: '\\',
-            line: @line_num,
-            column: @column
-          }
+          add_token(:line_continuation, '\\')
           @column += 1
           @position += 1
 
@@ -352,67 +331,61 @@ module Vinter
         # Check for special case where 'function' is followed by '('
         # which likely means it's used as a built-in function
         if chunk =~ /\Afunction\s*\(/
-          @tokens << {
-            type: :identifier,  # Treat as identifier, not keyword
-            value: 'function',
-            line: @line_num,
-            column: @column
-          }
-          @column += 'function'.length
-          @position += 'function'.length
+          add_token(:identifier, 'function') # Treat as identifier, not keyword
+          advance_position(FUNCTION_KEYWORD_LENGTH)
           next
         end
 
         match_found = false
 
         TOKEN_TYPES.each do |type, pattern|
-          if match = chunk.match(/\A(#{pattern})/)
-            value = match[0]
-            token = {
-              type: type,
-              value: value,
-              line: @line_num,
-              column: @column
-            }
-            @tokens << token unless type == :whitespace
+          next unless (match = chunk.match(/\A(#{pattern})/))
 
-            # Update position
-            if value.include?("\n")
-              lines = value.split("\n")
-              @line_num += lines.size - 1
-              if lines.size > 1
-                @column = lines.last.length + 1
-              else
-                @column += value.length
-              end
-            else
-              @column += value.length
-            end
-
-            @position += value.length
-            match_found = true
-            break
-          end
-        end
-
-        unless match_found
-          # Try to handle unknown characters
-          @tokens << {
-            type: :unknown,
-            value: chunk[0],
+          value = match[0]
+          token = {
+            type: type,
+            value: value,
             line: @line_num,
             column: @column
           }
+          @tokens << token unless type == :whitespace
 
-          if chunk[0] == "\n"
-            @line_num += 1
-            @column = 1
+          # Update position
+          if value.include?("\n")
+            lines = value.split("\n")
+            @line_num += lines.size - 1
+            if lines.size > 1
+              @column = lines.last.length + 1
+            else
+              @column += value.length
+            end
           else
-            @column += 1
+            @column += value.length
           end
 
-          @position += 1
+          @position += value.length
+          match_found = true
+          break
         end
+
+        next if match_found
+
+        # Try to handle unknown characters
+        @tokens << {
+          type: :unknown,
+          value: chunk[0],
+          line: @line_num,
+          column: @column
+        }
+
+        if chunk[0] == "\n"
+          @line_num += 1
+          @column = 1
+        else
+          @column += 1
+        end
+
+        @position += 1
       end
 
       @tokens

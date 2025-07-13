@@ -9,7 +9,6 @@ RSpec.describe Vinter::Parser do
       parser = described_class.new(tokens)
       result = parser.parse
 
-      ast = result[:ast]
       expect(result[:ast][:type]).to eq(:program)
       expect(result[:ast][:body].size).to eq(1)
       expect(result[:ast][:body][0][:type]).to eq(:let_statement)
