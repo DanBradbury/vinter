@@ -1,16 +1,12 @@
 module Vinter
   class Lexer
     TOKEN_TYPES = {
-      # Vim9 specific keywords
-      keyword: /\b(if|else|elseif|endif|while|endwhile|for|endfor|def|enddef|function|endfunction|endfunc|return|const|var|final|import|export|class|extends|static|enum|type|vim9script|abort|autocmd|echom|echoerr|echohl|echomsg|let|execute|exec|continue|break|try|catch|finally|endtry|throw|runtime|silent|delete|command|call|set|nnoremap|nmap|inoremap|imap|vnoremap|vmap|xnoremap|xmap|cnoremap|cmap|noremap|map)\b/,
       # Identifiers can include # and special characters
       identifier: /\b[a-zA-Z_][a-zA-Z0-9_#]*\b/,
       # Single-character operators
       operator: /[\+\-\*\/=%<>!&\|\.]/,
       # Multi-character operators handled separately
       number: /\b(0[xX][0-9A-Fa-f]+|0[oO][0-7]+|0[bB][01]+|\d+(\.\d+)?([eE][+-]?\d+)?)\b/,
-      # Handle both single and double quoted strings
-      # string: /"(\\"|[^"])*"|'(\\'|[^'])*'/,
       register_access: /@[a-zA-Z0-9":.%#=*+~_\/\-]/,
       # Vim9 comments use #
       comment: /(#|").*/,
@@ -30,6 +26,20 @@ module Vinter
     }
 
     CONTINUATION_OPERATORS = %w(. .. + - * / = == ==# ==? != > < >= <= && || ? : -> =>)
+    SILENT_BANG_LENGTH = 7
+    ELLIPSIS_LENGTH = 3
+
+    # Mapping of prefixes to their token types
+    SCOPED_VARIABLE_PATTERNS = {
+      'v:' => :special_variable,
+      's:' => :script_local,
+      'b:' => :buffer_local,
+      'w:' => :window_local,
+      't:' => :tab_local,
+      'g:' => :global_variable,
+      'l:' => :local_variable
+    }
+
     def initialize(input)
       @input = input
       @tokens = []
@@ -47,6 +57,31 @@ module Vinter
         i += 1
       end
       nil # Return nil if no unescaped newline is found
+    end
+
+    def try_match_scoped_variable(chunk)
+      SCOPED_VARIABLE_PATTERNS.each do |prefix, token_type|
+        if match = chunk.match(/\A#{Regexp.escape(prefix)}[a-zA-Z_][a-zA-Z0-9_]*/)
+          add_token(token_type, match[0])
+          advance_position(match[0].length)
+          return true
+        end
+      end
+      false
+    end
+
+    def add_token(type, value)
+      @tokens << {
+        type: type,
+        value: value,
+        line: @line_num,
+        column: @column
+      }
+    end
+
+    def advance_position(length)
+      @column += length
+      @position += length
     end
 
     def tokenize
@@ -150,152 +185,46 @@ module Vinter
             line: @line_num,
             column: @column
           }
-          @column += 7
-          @position += 7
+          @column += SILENT_BANG_LENGTH
+          @position += SILENT_BANG_LENGTH
           next
         end
 
         # Check for keywords first, before other token types
         if match = chunk.match(/\A\b(if|else|elseif|endif|while|endwhile|for|endfor|def|enddef|function|endfunction|endfunc|return|const|var|final|import|export|class|extends|static|enum|type|vim9script|abort|autocmd|echoerr|echohl|echomsg|let|execute)\b/)
-          @tokens << {
-            type: :keyword,
-            value: match[0],
-            line: @line_num,
-            column: @column
-          }
-          @column += match[0].length
-          @position += match[0].length
+          add_token(:keyword, match[0])
+          advance_position(match[0].length)
           next
         end
 
         # Handle Vim scoped option variables with &l: or &g: prefix
         if match = chunk.match(/\A&[lg]:[a-zA-Z_][a-zA-Z0-9_]*/)
-          @tokens << {
-            type: :scoped_option_variable,
-            value: match[0],
-            line: @line_num,
-            column: @column
-          }
-          @column += match[0].length
-          @position += match[0].length
+          add_token(:scoped_option_variable, match[0])
+          advance_position(match[0].length)
           next
         end
         
         # Handle Vim option variables with & prefix
         if match = chunk.match(/\A&[a-zA-Z_][a-zA-Z0-9_]*/)
-          @tokens << {
-            type: :option_variable,
-            value: match[0],
-            line: @line_num,
-            column: @column
-          }
-          @column += match[0].length
-          @position += match[0].length
+          add_token(:option_variable, match[0])
+          advance_position(match[0].length)
           next
         end
 
-        # Handle Vim special variables with v: prefix
-        if match = chunk.match(/\Av:[a-zA-Z_][a-zA-Z0-9_]*/)
-          @tokens << {
-            type: :special_variable,
-            value: match[0],
-            line: @line_num,
-            column: @column
-          }
-          @column += match[0].length
-          @position += match[0].length
-          next
-        end
+        # Handle scoped variables (v:, s:, b:, w:, t:, g:, l:)
+        next if try_match_scoped_variable(chunk)
 
-        # Handle script-local identifiers with s: prefix
-        if match = chunk.match(/\As:[a-zA-Z_][a-zA-Z0-9_]*/)
-          @tokens << {
-            type: :script_local,
-            value: match[0],
-            line: @line_num,
-            column: @column
-          }
-          @column += match[0].length
-          @position += match[0].length
-          next
-        end
-
-        # Handle buffer-local identifiers with b: prefix
-        if match = chunk.match(/\Ab:[a-zA-Z_][a-zA-Z0-9_]*/)
-          @tokens << {
-            type: :buffer_local,
-            value: match[0],
-            line: @line_num,
-            column: @column
-          }
-          @column += match[0].length
-          @position += match[0].length
-          next
-        end
-
-        # Handle window-local identifiers with w: prefix
-        if match = chunk.match(/\Aw:[a-zA-Z_][a-zA-Z0-9_]*/)
-          @tokens << {
-            type: :window_local,
-            value: match[0],
-            line: @line_num,
-            column: @column
-          }
-          @column += match[0].length
-          @position += match[0].length
-          next
-        end
-
-        # Handle tab-local identifiers with t: prefix
-        if match = chunk.match(/\At:[a-zA-Z_][a-zA-Z0-9_]*/)
-          @tokens << {
-            type: :tab_local,
-            value: match[0],
-            line: @line_num,
-            column: @column
-          }
-          @column += match[0].length
-          @position += match[0].length
-          next
-        end
-
-
-        # Handle global variables with g: prefix
-        if match = chunk.match(/\Ag:[a-zA-Z_][a-zA-Z0-9_]*/)
-          @tokens << {
-            type: :global_variable,
-            value: match[0],
-            line: @line_num,
-            column: @column
-          }
-          @column += match[0].length
-          @position += match[0].length
-          next
-        end
-
-        # Handle argument variables with a: prefix
+        # Handle argument variables with a: prefix (both named and numbered)
         if match = chunk.match(/\Aa:[a-zA-Z_][a-zA-Z0-9_]*/) || match = chunk.match(/\Aa:[A-Z0-9]/)
-          @tokens << {
-            type: :arg_variable,
-            value: match[0],
-            line: @line_num,
-            column: @column
-          }
-          @column += match[0].length
-          @position += match[0].length
+          add_token(:arg_variable, match[0])
+          advance_position(match[0].length)
           next
         end
 
-        # Handle argument variables with a: prefix
+        # Handle local variables with l: prefix
         if match = chunk.match(/\Al:[a-zA-Z_][a-zA-Z0-9_]*/)
-          @tokens << {
-            type: :local_variable,
-            value: match[0],
-            line: @line_num,
-            column: @column
-          }
-          @column += match[0].length
-          @position += match[0].length
+          add_token(:local_variable, match[0])
+          advance_position(match[0].length)
           next
         end
 
@@ -333,8 +262,8 @@ module Vinter
             line: @line_num,
             column: @column
           }
-          @column += 3
-          @position += 3
+          @column += ELLIPSIS_LENGTH
+          @position += ELLIPSIS_LENGTH
           next
         end
 
