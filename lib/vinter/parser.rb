@@ -271,6 +271,8 @@ module Vinter
           parse_execute_statement
         when 'let'
           parse_let_statement
+        when 'unlet'
+          parse_unlet_statement
         when 'echohl', 'echomsg', 'echoerr', 'echom'
           parse_echo_statement
         when 'augroup'
@@ -281,8 +283,16 @@ module Vinter
           parse_call_statement
         when 'delete'
           parse_delete_statement
-        when 'set'
+        when 'set', 'setlocal'
           parse_set_command
+        when 'syntax'
+          parse_syntax_command
+        when 'highlight'
+          parse_highlight_command
+        when 'sleep'
+          parse_sleep_command
+        when 'source'
+          parse_source_command
         else
           @warnings << {
             message: "Unexpected keyword: #{current_token[:value]}",
@@ -618,8 +628,8 @@ module Vinter
             end
           end
 
-          # Check if this is an indexed access (dictionary key lookup)
-          if current_token && current_token[:type] == :bracket_open
+          # Check for chained indexed access (dictionary key lookup)
+          while current_token && current_token[:type] == :bracket_open
             bracket_token = advance # Skip '['
             index_expr = parse_expression
             expect(:bracket_close) # Skip ']'
@@ -769,6 +779,57 @@ module Vinter
         target: target,
         operator: operator,
         value: value,
+        line: line,
+        column: column
+      }
+    end
+
+    def parse_unlet_statement
+      token = advance # Skip 'unlet'
+      line = token[:line]
+      column = token[:column]
+
+      # Parse the variable to unlet
+      target = nil
+      if current_token
+        case current_token[:type]
+        when :identifier, :global_variable, :script_local, :buffer_local, :window_local, :tab_local, :arg_variable, :option_variable, :special_variable, :local_variable
+          target = {
+            type: current_token[:type],
+            name: current_token[:value],
+            line: current_token[:line],
+            column: current_token[:column]
+          }
+          advance
+
+          # Check for chained indexed access (like variable[key])
+          while current_token && current_token[:type] == :bracket_open
+            bracket_token = advance # Skip '['
+            index_expr = parse_expression
+            expect(:bracket_close) # Skip ']'
+
+            # Update target to be an indexed access
+            target = {
+              type: :indexed_access,
+              object: target,
+              index: index_expr,
+              line: bracket_token[:line],
+              column: bracket_token[:column]
+            }
+          end
+        else
+          @errors << {
+            message: "Expected variable name after 'unlet'",
+            position: @position,
+            line: current_token ? current_token[:line] : 0,
+            column: current_token ? current_token[:column] : 0
+          }
+        end
+      end
+
+      {
+        type: :unlet_statement,
+        target: target,
         line: line,
         column: column
       }
@@ -1551,12 +1612,15 @@ module Vinter
         while current_token && peek_token && [:line_continuation, :identifier].include?(peek_token[:type])
           # Handle strings with line continuation
           if ["'", '"'].include? current_token[:value][-1]
+            token_line = current_token[:line]
+            token_column = current_token[:column]
+            advance # Consume the string token
             return {
               type: :literal,
               value: string_value,
               token_type: :string,
-              line: current_token[:line],
-              column: current_token[:column]
+              line: token_line,
+              column: token_column
             }
           else
             advance
@@ -1972,33 +2036,33 @@ module Vinter
       when :identifier
         # Special handling for Vim built-in functions
         if ['has', 'exists', 'empty', 'get', 'type', 'map', 'copy'].include?(token[:value])
-          return parse_builtin_function_call(token[:value], line, column)
-        end
-
-        advance
-
-        # Check if this is a function call
-        if current_token && current_token[:type] == :paren_open
-          return parse_function_call(token[:value], line, column)
-        end
-
-        # Special handling for execute command
-        if token[:value] == 'execute'
-          # Parse the string expressions for execute
-          # For now we'll just treat it as a normal identifier
-          expr = {
-            type: :identifier,
-            name: token[:value],
-            line: line,
-            column: column
-          }
+          expr = parse_builtin_function_call(token[:value], line, column)
         else
-          expr = {
-            type: :identifier,
-            name: token[:value],
-            line: line,
-            column: column
-          }
+          advance
+
+          # Check if this is a function call
+          if current_token && current_token[:type] == :paren_open
+            expr = parse_function_call(token[:value], line, column)
+          else
+            # Special handling for execute command
+            if token[:value] == 'execute'
+              # Parse the string expressions for execute
+              # For now we'll just treat it as a normal identifier
+              expr = {
+                type: :identifier,
+                name: token[:value],
+                line: line,
+                column: column
+              }
+            else
+              expr = {
+                type: :identifier,
+                name: token[:value],
+                line: line,
+                column: column
+              }
+            end
+          end
         end
       when :namespace_prefix
         advance
@@ -2019,7 +2083,7 @@ module Vinter
       when :bracket_open
         expr = parse_list_literal(line, column)
       when :brace_open
-        expr = parse_dict_literal(line, column)
+        expr = parse_vim_lambda_or_dict(line, column)
       when :backslash
         # Handle line continuation with backslash
         advance
@@ -2050,15 +2114,21 @@ module Vinter
       while current_token
         # Check for property access with dot
         if current_token[:type] == :operator && current_token[:value] == '.'
-          # Check if this is a property access (only when left side is an identifier or object)
-          if expr[:type] == :identifier || expr[:type] == :global_variable ||
-            expr[:type] == :script_local || expr[:type] == :namespace_prefix
+          # Look ahead to determine if this is property access or concatenation
+          next_token = peek_token
+          is_property_access = next_token && (next_token[:type] == :identifier || next_token[:type] == :keyword)
+          
+          # Check if this is a property access (only when right side is identifier/keyword)
+          if is_property_access && (expr[:type] == :identifier || expr[:type] == :global_variable ||
+            expr[:type] == :script_local || expr[:type] == :namespace_prefix ||
+            expr[:type] == :arg_variable || expr[:type] == :buffer_local ||
+            expr[:type] == :window_local || expr[:type] == :tab_local ||
+            expr[:type] == :local_variable || expr[:type] == :property_access ||
+            expr[:type] == :indexed_access)
 
             dot_token = advance # Skip '.'
             # Next token should be an identifier (property name)
             if !current_token || (current_token[:type] != :identifier &&
-              current_token[:type] != :arg_variable &&
-              current_token[:type] != :string &&
               current_token[:type] != :keyword)
                 @errors << {
                   message: "Expected property name after '.'",
@@ -2078,6 +2148,7 @@ module Vinter
               column: dot_token[:column]
             }
           else
+            # This is concatenation or other binary operation, break to let binary expression parser handle it
             break
           end
 
@@ -2354,57 +2425,65 @@ module Vinter
       # Parse parameters
       params = []
 
-      # Parse parameter(s)
-      if current_token && (current_token[:type] == :identifier ||
-                          current_token[:type] == :local_variable ||
-                          current_token[:type] == :global_variable)
-        param_name = current_token[:value]
-        param_line = current_token[:line]
-        param_column = current_token[:column]
-        advance
+      # Check if this is a no-parameter lambda (starts with ->)
+      if current_token && current_token[:type] == :operator && current_token[:value] == '->'
+        # No parameters, skip to arrow parsing
+      else
+        # Parse parameter(s)
+        if current_token && (current_token[:type] == :identifier ||
+                            current_token[:type] == :local_variable ||
+                            current_token[:type] == :global_variable)
+          param_name = current_token[:value]
+          param_line = current_token[:line]
+          param_column = current_token[:column]
+          advance
 
-        params << {
-          type: :parameter,
-          name: param_name,
-          line: param_line,
-          column: param_column
-        }
+          params << {
+            type: :parameter,
+            name: param_name,
+            line: param_line,
+            column: param_column
+          }
 
-        # Handle multiple parameters (comma-separated)
-        while current_token && current_token[:type] == :comma
-          advance # Skip comma
+          # Handle multiple parameters (comma-separated)
+          while current_token && current_token[:type] == :comma
+            advance # Skip comma
 
-          if current_token && (current_token[:type] == :identifier ||
-                              current_token[:type] == :local_variable ||
-                              current_token[:type] == :global_variable)
-            param_name = current_token[:value]
-            param_line = current_token[:line]
-            param_column = current_token[:column]
-            advance
+            if current_token && (current_token[:type] == :identifier ||
+                                current_token[:type] == :local_variable ||
+                                current_token[:type] == :global_variable)
+              param_name = current_token[:value]
+              param_line = current_token[:line]
+              param_column = current_token[:column]
+              advance
 
-            params << {
-              type: :parameter,
-              name: param_name,
-              line: param_line,
-              column: param_column
-            }
-          else
+              params << {
+                type: :parameter,
+                name: param_name,
+                line: param_line,
+                column: param_column
+              }
+            else
+              @errors << {
+                message: "Expected parameter name after comma in lambda function",
+                position: @position,
+                line: current_token ? current_token[:line] : 0,
+                column: current_token ? current_token[:column] : 0
+              }
+              break
+            end
+          end
+        else
+          # For no-parameter lambdas, this is not an error
+          if !(current_token && current_token[:type] == :operator && current_token[:value] == '->')
             @errors << {
-              message: "Expected parameter name after comma in lambda function",
+              message: "Expected parameter name or '->' in lambda function",
               position: @position,
               line: current_token ? current_token[:line] : 0,
               column: current_token ? current_token[:column] : 0
             }
-            break
           end
         end
-      else
-        @errors << {
-          message: "Expected parameter name in lambda function",
-          position: @position,
-          line: current_token ? current_token[:line] : 0,
-          column: current_token ? current_token[:column] : 0
-        }
       end
 
       # Expect the arrow token
@@ -2654,25 +2733,41 @@ module Vinter
           value: value
         }
 
-        # Skip any whitespace, backslash line continuation markers, and commas
-        found_comma = false
-        while current_token && (current_token[:type] == :whitespace ||
-                               current_token[:type] == :backslash ||
-                               current_token[:type] == :line_continuation ||
-                               current_token[:type] == :comma)
-          found_comma = true if current_token[:type] == :comma
+        # After parsing an entry, skip whitespace and look for comma or closing brace
+        while current_token && current_token[:type] == :whitespace
           advance
         end
 
-        # If no comma was found and we haven't reached the end, that's an error
-        # unless we've reached the closing brace
-        if !found_comma && current_token && current_token[:type] != :brace_close
-          @errors << {
-            message: "Expected comma or closing brace after dictionary entry",
-            position: @position,
-            line: current_token ? current_token[:line] : 0,
-            column: current_token ? current_token[:column] : 0
-          }
+        # Check for comma (indicates more entries follow)
+        if current_token && current_token[:type] == :comma
+          advance # Skip comma
+          # Skip any line continuations and whitespace after comma
+          while current_token && (current_token[:type] == :whitespace ||
+                                 current_token[:type] == :backslash ||
+                                 current_token[:type] == :line_continuation)
+            advance
+          end
+        else
+          # No comma - skip any line continuations before checking for closing brace
+          while current_token && (current_token[:type] == :backslash ||
+                                 current_token[:type] == :line_continuation ||
+                                 current_token[:type] == :whitespace)
+            advance
+          end
+          
+          # After skipping continuations, we should find the closing brace
+          if current_token && current_token[:type] == :brace_close
+            # This is fine - last entry without trailing comma
+            break
+          elsif current_token && current_token[:type] != :brace_close
+            @errors << {
+              message: "Expected comma or closing brace after dictionary entry",
+              position: @position,
+              line: current_token ? current_token[:line] : 0,
+              column: current_token ? current_token[:column] : 0
+            }
+            break
+          end
         end
       end
 
@@ -2881,26 +2976,31 @@ module Vinter
       is_lambda = false
       param_names = []
 
-      # Parse until closing brace or arrow
-      while @position < @tokens.length && current_token[:type] != :brace_close
-        if current_token[:type] == :identifier
-          param_names << current_token[:value]
-          advance
-
-          # Skip comma between parameters
-          if current_token && current_token[:type] == :comma
+      # Check for immediate arrow (no parameters lambda)
+      if current_token && current_token[:type] == :operator && current_token[:value] == '->'
+        is_lambda = true
+      else
+        # Parse until closing brace or arrow
+        while @position < @tokens.length && current_token[:type] != :brace_close
+          if current_token[:type] == :identifier
+            param_names << current_token[:value]
             advance
-            next
-          end
-        elsif current_token[:type] == :operator && current_token[:value] == '->'
-          is_lambda = true
-          break
-        else
-          # If we see a colon, this is likely a nested dictionary
-          if current_token && current_token[:type] == :colon
+
+            # Skip comma between parameters
+            if current_token && current_token[:type] == :comma
+              advance
+              next
+            end
+          elsif current_token[:type] == :operator && current_token[:value] == '->'
+            is_lambda = true
             break
+          else
+            # If we see a colon, this is likely a nested dictionary
+            if current_token && current_token[:type] == :colon
+              break
+            end
+            advance
           end
-          advance
         end
       end
 
@@ -3778,6 +3878,56 @@ module Vinter
       }
     end
 
+    def parse_brace_sequence_value
+      # Handle special brace sequences like {{{,}}} for foldmarker
+      value_parts = []
+      
+      while current_token && (current_token[:type] == :brace_open || 
+                             current_token[:type] == :brace_close || 
+                             current_token[:type] == :comma)
+        value_parts << current_token[:value]
+        advance
+      end
+      
+      return {
+        type: :brace_sequence,
+        value: value_parts.join(''),
+        line: current_token ? current_token[:line] : 0,
+        column: current_token ? current_token[:column] : 0
+      }
+    end
+
+    def parse_comma_separated_value
+      # Handle comma-separated option values like menu,menuone,noinsert,noselect
+      values = []
+      
+      # Parse first value
+      if current_token && current_token[:type] == :identifier
+        values << current_token[:value]
+        advance
+      else
+        return parse_expression  # Fall back to regular expression parsing
+      end
+      
+      # Parse additional comma-separated values
+      while current_token && current_token[:type] == :comma
+        advance # Skip comma
+        if current_token && current_token[:type] == :identifier
+          values << current_token[:value]
+          advance
+        else
+          break
+        end
+      end
+      
+      return {
+        type: :comma_separated_value,
+        values: values,
+        line: current_token ? current_token[:line] : 0,
+        column: current_token ? current_token[:column] : 0
+      }
+    end
+
     def parse_set_command
       token = advance # Skip 'set'
       line = token[:line]
@@ -3821,7 +3971,17 @@ module Vinter
       value = nil
       if current_token && current_token[:type] == :operator && current_token[:value] == '='
         advance # Skip '='
-        value = parse_expression
+        
+        # Special handling for foldmarker and similar options that use brace notation
+        if option_name == 'foldmarker' && current_token && current_token[:type] == :brace_open
+          # Parse as special brace sequence value (e.g., {{{,}}})
+          value = parse_brace_sequence_value
+        # Special handling for comma-separated option values
+        elsif ['completeopt', 'formatoptions', 'guioptions', 'wildoptions'].include?(option_name)
+          value = parse_comma_separated_value
+        else
+          value = parse_expression
+        end
       elsif current_token && current_token[:type] == :operator && current_token[:value] == '-'
         # Handle syntaxes like 'set option-=value'
         op = current_token[:value]
@@ -3864,6 +4024,145 @@ module Vinter
         option: option_name,
         value: value,
         reset_to_vim_default: reset_to_vim_default,
+        line: line,
+        column: column
+      }
+    end
+
+    def parse_syntax_command
+      token = advance # Skip 'syntax'
+      line = token[:line]
+      column = token[:column]
+
+      # Parse syntax subcommand (match, region, keyword, etc.)
+      subcommand = nil
+      if current_token && current_token[:type] == :identifier
+        subcommand = current_token[:value]
+        advance
+      end
+
+      # Parse syntax group name
+      group_name = nil
+      if current_token && current_token[:type] == :identifier
+        group_name = current_token[:value]
+        advance
+      end
+
+      # Parse pattern (regex or other pattern)
+      pattern = nil
+      if current_token && current_token[:type] == :regex
+        pattern = current_token[:value]
+        advance
+      end
+
+      # Parse any remaining arguments as raw text until end of line
+      args = []
+      while current_token && current_token[:type] != :comment
+        args << current_token[:value]
+        advance
+      end
+
+      {
+        type: :syntax_command,
+        subcommand: subcommand,
+        group_name: group_name,
+        pattern: pattern,
+        args: args.join(' ').strip,
+        line: line,
+        column: column
+      }
+    end
+
+    def parse_highlight_command
+      token = advance # Skip 'highlight'
+      line = token[:line]
+      column = token[:column]
+
+      # Parse highlight group name
+      group_name = nil
+      if current_token && current_token[:type] == :identifier
+        group_name = current_token[:value]
+        advance
+      end
+
+      # Parse highlight attributes as key=value pairs
+      attributes = {}
+      while current_token && current_token[:type] != :comment
+        # Parse attribute name
+        if current_token && current_token[:type] == :identifier
+          attr_name = current_token[:value]
+          advance
+
+          # Parse = sign
+          if current_token && current_token[:type] == :operator && current_token[:value] == '='
+            advance
+
+            # Parse attribute value (can be identifier, number, or hex color)
+            if current_token && (current_token[:type] == :identifier || 
+                                current_token[:type] == :number || 
+                                current_token[:type] == :hex_color)
+              attributes[attr_name] = current_token[:value]
+              advance
+            end
+          end
+        else
+          advance
+        end
+      end
+
+      {
+        type: :highlight_command,
+        group_name: group_name,
+        attributes: attributes,
+        line: line,
+        column: column
+      }
+    end
+
+    def parse_sleep_command
+      token = advance # Skip 'sleep'
+      line = token[:line]
+      column = token[:column]
+
+      # Parse duration (number with optional suffix)
+      duration = nil
+      if current_token && current_token[:type] == :number
+        duration = current_token[:value]
+        advance
+      else
+        @errors << {
+          message: "Expected duration after 'sleep'",
+          position: @position,
+          line: current_token ? current_token[:line] : line,
+          column: current_token ? current_token[:column] : column + 5
+        }
+      end
+
+      {
+        type: :sleep_command,
+        duration: duration,
+        line: line,
+        column: column
+      }
+    end
+
+    def parse_source_command
+      token = advance # Skip 'source'
+      line = token[:line]
+      column = token[:column]
+
+      # Parse file path - collect all tokens until end of line/comment
+      path_parts = []
+      while current_token && current_token[:type] != :comment
+        path_parts << current_token[:value]
+        advance
+      end
+
+      file_path = path_parts.join('')
+
+      {
+        type: :source_command,
+        file_path: file_path,
         line: line,
         column: column
       }

@@ -2,13 +2,13 @@ module Vinter
   class Lexer
     TOKEN_TYPES = {
       # Vim9 specific keywords
-      keyword: /\b(if|else|elseif|endif|while|endwhile|for|endfor|def|enddef|function|endfunction|endfunc|return|const|var|final|import|export|class|extends|static|enum|type|vim9script|abort|autocmd|echom|echoerr|echohl|echomsg|let|execute|exec|continue|break|try|catch|finally|endtry|throw|runtime|silent|delete|command|call|set|nnoremap|nmap|inoremap|imap|vnoremap|vmap|xnoremap|xmap|cnoremap|cmap|noremap|map)\b/,
+      keyword: /\b(if|else|elseif|endif|while|endwhile|for|endfor|def|enddef|function|endfunction|endfunc|return|const|var|final|import|export|class|extends|static|enum|type|vim9script|abort|autocmd|echom|echoerr|echohl|echomsg|let|unlet|execute|exec|continue|break|try|catch|finally|endtry|throw|runtime|silent|delete|command|call|set|setlocal|syntax|highlight|sleep|source|nnoremap|nmap|inoremap|imap|vnoremap|vmap|xnoremap|xmap|cnoremap|cmap|noremap|map)\b/,
       # Identifiers can include # and special characters
       identifier: /\b[a-zA-Z_][a-zA-Z0-9_#]*\b/,
       # Single-character operators
       operator: /[\+\-\*\/=%<>!&\|\.]/,
       # Multi-character operators handled separately
-      number: /\b(0[xX][0-9A-Fa-f]+|0[oO][0-7]+|0[bB][01]+|\d+(\.\d+)?([eE][+-]?\d+)?)\b/,
+      number: /\b(0[xX][0-9A-Fa-f]+|0[oO][0-7]+|0[bB][01]+|\d+(\.\d+)?([eE][+-]?\d+)?[smh]?)\b/,
       # Handle both single and double quoted strings
       # string: /"(\\"|[^"])*"|'(\\'|[^'])*'/,
       register_access: /@[a-zA-Z0-9":.%#=*+~_\/\-]/,
@@ -36,6 +36,27 @@ module Vinter
       @position = 0
       @line_num = 1
       @column = 1
+    end
+
+    def should_parse_as_regex
+      # Look at recent tokens to determine if we're in a regex context
+      recent_tokens = @tokens.last(3)
+      
+      # Check for contexts where regex is expected
+      return true if recent_tokens.any? { |t| 
+        t && t[:type] == :keyword && ['syntax'].include?(t[:value]) 
+      }
+      
+      return true if recent_tokens.any? { |t|
+        t && t[:type] == :identifier && ['match', 'region', 'keyword'].include?(t[:value])
+      }
+      
+      # Check for comparison operators that often use regex
+      return true if recent_tokens.any? { |t|
+        t && t[:type] == :operator && ['=~', '!~', '=~#', '!~#', '=~?', '!~?'].include?(t[:value])
+      }
+      
+      false
     end
 
     def find_unescaped_newline(chunk)
@@ -165,7 +186,7 @@ module Vinter
         end
 
         # Check for keywords first, before other token types
-        if match = chunk.match(/\A\b(if|else|elseif|endif|while|endwhile|for|endfor|def|enddef|function|endfunction|endfunc|return|const|var|final|import|export|class|extends|static|enum|type|vim9script|abort|autocmd|echoerr|echohl|echomsg|let|execute)\b/)
+        if match = chunk.match(/\A\b(if|else|elseif|endif|while|endwhile|for|endfor|def|enddef|function|endfunction|endfunc|return|const|var|final|import|export|class|extends|static|enum|type|vim9script|abort|autocmd|echoerr|echohl|echomsg|let|unlet|execute|setlocal|syntax|highlight|sleep|source)\b/)
           @tokens << {
             type: :keyword,
             value: match[0],
@@ -351,6 +372,52 @@ module Vinter
         if match = chunk.match(/\A(=~#|=~\?|=~|!~#|!~\?|!~|==#|==\?|==|!=#|!=\?|!=|=>\?|=>|>=#|>=\?|>=|<=#|<=\?|<=|->#|->\?|->|\.\.|\|\||&&)/)
           @tokens << {
             type: :operator,
+            value: match[0],
+            line: @line_num,
+            column: @column
+          }
+          @column += match[0].length
+          @position += match[0].length
+          next
+        end
+
+        # Handle regex patterns /pattern/ - only in specific contexts
+        if chunk.start_with?('/') && should_parse_as_regex
+          i = 1
+          regex_value = '/'
+          
+          # Keep going until we find the closing slash
+          while i < chunk.length
+            char = chunk[i]
+            regex_value += char
+            
+            if char == '/' && (i == 1 || chunk[i-1] != '\\')
+              # Found closing slash
+              i += 1
+              break
+            end
+            
+            i += 1
+          end
+          
+          # Add the regex token if we found a closing slash
+          if regex_value.end_with?('/')
+            @tokens << {
+              type: :regex,
+              value: regex_value,
+              line: @line_num,
+              column: @column
+            }
+            @column += regex_value.length
+            @position += regex_value.length
+            next
+          end
+        end
+
+        # Handle hex colors like #33FF33
+        if match = chunk.match(/\A#[0-9A-Fa-f]{6}/)
+          @tokens << {
+            type: :hex_color,
             value: match[0],
             line: @line_num,
             column: @column
