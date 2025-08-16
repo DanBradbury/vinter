@@ -54,10 +54,19 @@ module Vinter
         chunk = @input[@position..-1]
 
         # First check if the line starts with a quote (comment in Vim)
-        current_line_start = chunk.index("\n") || 0
-        current_line_start += 1 if @input[current_line_start] == "\n"
+        # Check if we're at the beginning of a line (optionally after whitespace)
+        line_start = @position == 0 || @input[@position - 1] == "\n"
+        if !line_start
+          # Check if we're after whitespace at the start of a line
+          temp_pos = @position - 1
+          while temp_pos >= 0 && @input[temp_pos] =~ /[ \t]/
+            temp_pos -= 1
+          end
+          line_start = temp_pos < 0 || @input[temp_pos] == "\n"
+        end
+        
         # If we're at the start of a line and it begins with a quote
-        if (@position <= current_line_start) && chunk.start_with?('"')
+        if line_start && chunk.start_with?('"')
           # Find the end of the line
           line_end = find_unescaped_newline(chunk) || chunk.length
           comment_text = chunk[0...line_end]

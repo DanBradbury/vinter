@@ -242,7 +242,18 @@ module Vinter
         when 'def'
           parse_def_function
         when 'function'
-          parse_legacy_function
+          # Only parse as function declaration if it looks like one
+          # Function declarations are followed by ! or identifier (function name)
+          if peek_token && (
+            (peek_token[:type] == :operator && peek_token[:value] == '!') ||
+            peek_token[:type] == :identifier ||
+            peek_token[:type] == :script_local
+          )
+            parse_legacy_function
+          else
+            # Not a function declaration, parse as expression statement
+            parse_expression_statement
+          end
         when 'return'
           parse_return_statement
         when 'var', 'const', 'final'
@@ -586,7 +597,7 @@ module Vinter
             dot_token = advance # Skip '.'
 
             # Next token should be an identifier (property name)
-            if current_token && current_token[:type] == :identifier
+            if current_token && (current_token[:type] == :identifier || current_token[:type] == :keyword)
               property_token = advance # Get the property name
 
               # Update the target to be a property access
@@ -1078,7 +1089,19 @@ module Vinter
         end
 
         # Expect endfor
-        expect(:keyword) # This should be 'endfor'
+        if current_token && current_token[:type] == :keyword && current_token[:value] == 'endfor'
+          advance # Skip 'endfor'
+        else
+          # Only add an error if we haven't reached the end of the file
+          if @position < @tokens.length
+            @errors << {
+              message: "Expected 'endfor' to close for statement",
+              position: @position,
+              line: current_token ? current_token[:line] : 0,
+              column: current_token ? current_token[:column] : 0
+            }
+          end
+        end
 
         return {
           type: :for_statement,
@@ -1144,7 +1167,19 @@ module Vinter
         end
 
         # Expect endfor
-        expect(:keyword) # This should be 'endfor'
+        if current_token && current_token[:type] == :keyword && current_token[:value] == 'endfor'
+          advance # Skip 'endfor'
+        else
+          # Only add an error if we haven't reached the end of the file
+          if @position < @tokens.length
+            @errors << {
+              message: "Expected 'endfor' to close for statement",
+              position: @position,
+              line: current_token ? current_token[:line] : 0,
+              column: current_token ? current_token[:column] : 0
+            }
+          end
+        end
 
         return {
           type: :for_statement,
@@ -1196,7 +1231,19 @@ module Vinter
         end
 
         # Expect endfor
-        expect(:keyword) # This should be 'endfor'
+        if current_token && current_token[:type] == :keyword && current_token[:value] == 'endfor'
+          advance # Skip 'endfor'
+        else
+          # Only add an error if we haven't reached the end of the file
+          if @position < @tokens.length
+            @errors << {
+              message: "Expected 'endfor' to close for statement",
+              position: @position,
+              line: current_token ? current_token[:line] : 0,
+              column: current_token ? current_token[:column] : 0
+            }
+          end
+        end
 
         return {
           type: :for_statement,
@@ -1714,9 +1761,11 @@ module Vinter
           # This is the type() function call
           return parse_builtin_function_call(token[:value], line, column)
         elsif token[:value] == 'function'
-          advance # Skip 'function'
-          # Expect opening parenthesis
-          if current_token && current_token[:type] == :paren_open
+          # Check if this is a function() call or just 'function' as property name
+          if peek_token && peek_token[:type] == :paren_open
+            advance # Skip 'function'
+            # This is a function() call
+            if current_token && current_token[:type] == :paren_open
             # This is a function reference call
             paren_token = advance # Skip '('
 
@@ -1725,12 +1774,21 @@ module Vinter
               func_name = current_token[:value]
               advance
 
+              # Check for additional arguments (function() can take multiple arguments)
+              args = []
+              while current_token && current_token[:type] == :comma
+                advance # Skip comma
+                arg = parse_expression
+                args << arg if arg
+              end
+
               # Expect closing parenthesis
               expect(:paren_close) # Skip ')'
 
               return {
                 type: :function_reference,
                 function_name: func_name,
+                arguments: args,
                 line: line,
                 column: column
               }
@@ -1755,16 +1813,16 @@ module Vinter
                 column: current_token ? current_token[:column] : 0
               }
             end
+          end
           else
-            # If not followed by parenthesis, it's likely a function declaration
-            @errors << {
-              message: "Unexpected keyword in expression: #{token[:value]}",
-              position: @position,
+            # If not followed by parenthesis, treat 'function' as an identifier (property name)
+            advance # Skip 'function'
+            return {
+              type: :identifier,
+              name: token[:value],
               line: line,
               column: column
             }
-            advance
-            return nil
           end
         # Legacy Vim allows certain keywords as identifiers in expressions
         elsif ['return', 'type'].include?(token[:value])
@@ -2000,7 +2058,8 @@ module Vinter
             # Next token should be an identifier (property name)
             if !current_token || (current_token[:type] != :identifier &&
               current_token[:type] != :arg_variable &&
-              current_token[:type] != :string)
+              current_token[:type] != :string &&
+              current_token[:type] != :keyword)
                 @errors << {
                   message: "Expected property name after '.'",
                   position: @position,
@@ -3150,15 +3209,19 @@ module Vinter
       end
 
       # Expect endfunction/endfunc
-      end_token = advance # This should be 'endfunction' or 'endfunc'
-      if end_token && end_token[:type] != :keyword &&
-         !['endfunction', 'endfunc'].include?(end_token[:value])
-        @errors << {
-          message: "Expected 'endfunction' or 'endfunc'",
-          position: @position,
-          line: end_token ? end_token[:line] : 0,
-          column: end_token ? end_token[:column] : 0
-        }
+      if current_token && current_token[:type] == :keyword && 
+         ['endfunction', 'endfunc'].include?(current_token[:value])
+        advance # Skip 'endfunction' or 'endfunc'
+      else
+        # Only add an error if we haven't reached the end of the file
+        if @position < @tokens.length
+          @errors << {
+            message: "Expected 'endfunction' or 'endfunc'",
+            position: @position,
+            line: current_token ? current_token[:line] : 0,
+            column: current_token ? current_token[:column] : 0
+          }
+        end
       end
 
       function_name = name ? name[:value] : nil
