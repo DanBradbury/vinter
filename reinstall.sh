@@ -1,0 +1,17 @@
+#!/bin/bash
+
+# Quick script to reinstall vinter gem locally
+
+echo "Uninstalling existing vinter gem..."
+gem uninstall vinter -a -x
+
+echo "Building new gem..."
+gem build vinter.gemspec
+
+echo "Installing new gem..."
+gem install vinter-*.gem
+
+echo "Cleaning up..."
+rm vinter-*.gem
+
+echo "Done! vinter gem has been reinstalled locally."
