@@ -1221,8 +1221,7 @@ module Vinter
 
         return type_name[:value]
       else
-        @errors << {
-          add_error("Expected type identifier")
+        add_error("Expected type identifier")
         advance
         return "unknown"
       end
