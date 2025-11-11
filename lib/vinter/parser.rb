@@ -529,18 +529,11 @@ module Vinter
         name = current_token[:value]
         advance
       else
-        @errors << {
-          message: "Expected augroup name",
-          position: @position,
-          line: current_token ? current_token[:line] : 0,
-          column: current_token ? current_token[:column] : 0
-        }
+        add_error("Expected augroup name")
       end
 
       # Check for augroup END
-      is_end_marker = false
-      if name && (name.upcase == "END" || name == "END")
-        is_end_marker = true
+      if name && name.upcase == "END"
         return {
           type: :augroup_end,
           line: line,
@@ -556,8 +549,7 @@ module Vinter
            (current_token[:type] == :identifier && current_token[:value] == 'augroup')
           # Look ahead for END
           if peek_token &&
-             ((peek_token[:type] == :identifier &&
-               (peek_token[:value].upcase == 'END' || peek_token[:value] == 'END')) ||
+             ((peek_token[:type] == :identifier && peek_token[:value].upcase == 'END') ||
               (peek_token[:type] == :keyword && peek_token[:value].upcase == 'END'))
             advance # Skip 'augroup'
             advance # Skip 'END'
@@ -988,32 +980,14 @@ module Vinter
           advance # Skip the pipe
 
           # Expect endif
-          if current_token && current_token[:type] == :keyword && current_token[:value] == 'endif'
-            advance # Skip 'endif'
-          else
-            @errors << {
-              message: "Expected 'endif' after '|' in one-line if statement",
-              position: @position,
-              line: current_token ? current_token[:line] : 0,
-              column: current_token ? current_token[:column] : 0
-            }
+          unless expect_keyword('endif')
+            add_error("Expected 'endif' after '|' in one-line if statement")
           end
         end
       else
-        # This is a regular multi-line if statement
-        # Continue with your existing logic for parsing normal if statements
-
-        # Parse statements until we hit 'else', 'elseif', or 'endif'
-        while @position < @tokens.length
-          # Check for the tokens that would terminate this block
-          if current_token && current_token[:type] == :keyword &&
-             ['else', 'elseif', 'endif'].include?(current_token[:value])
-            break
-          end
-
-          stmt = parse_statement
-          then_branch << stmt if stmt
-        end
+        # Parse multi-line if statement
+        # Parse statements until 'else', 'elseif', or 'endif'
+        then_branch = parse_body_until('else', 'elseif', 'endif')
 
         # Check for else/elseif
         if current_token && current_token[:type] == :keyword
@@ -1021,14 +995,7 @@ module Vinter
             advance # Skip 'else'
 
             # Parse statements until 'endif'
-            while @position < @tokens.length
-              if current_token[:type] == :keyword && current_token[:value] == 'endif'
-                break
-              end
-
-              stmt = parse_statement
-              else_branch << stmt if stmt
-            end
+            else_branch = parse_body_until('endif')
           elsif current_token[:value] == 'elseif'
             elseif_stmt = parse_if_statement
             else_branch << elseif_stmt if elseif_stmt
@@ -1045,19 +1012,7 @@ module Vinter
         end
 
         # Expect endif
-        if current_token && current_token[:type] == :keyword && current_token[:value] == 'endif'
-          advance # Skip 'endif'
-        else
-          # Don't add an error if we've already reached the end of the file
-          if @position < @tokens.length
-            @errors << {
-              message: "Expected 'endif' to close if statement",
-              position: @position,
-              line: current_token ? current_token[:line] : 0,
-              column: current_token ? current_token[:column] : 0
-            }
-          end
-        end
+        expect_end_keyword('endif')
       end
 
       {
