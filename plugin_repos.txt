@@ -1,0 +1,15 @@
+# List of vim plugin repositories to lint
+# Format: One repository URL per line
+# Lines starting with # are comments and will be skipped
+
+# Popular vim plugins with vimscript
+https://github.com/preservim/nerdtree.git
+https://github.com/vim-airline/vim-airline.git
+https://github.com/tpope/vim-fugitive.git
+https://github.com/tpope/vim-surround.git
+https://github.com/junegunn/fzf.vim.git
+https://github.com/scrooloose/syntastic.git
+https://github.com/dense-analysis/ale.git
+https://github.com/ervandew/supertab.git
+https://github.com/ctrlpvim/ctrlp.vim.git
+https://github.com/vim-scripts/AutoComplPop.git
