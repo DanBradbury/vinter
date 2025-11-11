@@ -71,6 +71,95 @@ module Vinter
       end
     end
 
+    # Helper method to add errors with consistent formatting
+    def add_error(message, token = current_token)
+      @errors << {
+        message: message,
+        position: @position,
+        line: token ? token[:line] : 0,
+        column: token ? token[:column] : 0
+      }
+    end
+
+    # Helper method to expect a specific keyword value
+    def expect_keyword(value)
+      if current_token && current_token[:type] == :keyword && current_token[:value] == value
+        advance
+        true
+      else
+        add_error("Expected '#{value}' keyword")
+        false
+      end
+    end
+
+    # Helper method to parse a body of statements until one or more end keywords
+    # Returns array of parsed statements
+    def parse_body_until(*end_keywords)
+      body = []
+      while @position < @tokens.length
+        # Check if we've reached an end keyword
+        if current_token && current_token[:type] == :keyword &&
+           end_keywords.include?(current_token[:value])
+          break
+        end
+
+        stmt = parse_statement
+        body << stmt if stmt
+      end
+      body
+    end
+
+    # Helper method to expect and consume an end keyword
+    # Returns true if found, false and adds error if not
+    def expect_end_keyword(*keywords)
+      if current_token && current_token[:type] == :keyword &&
+         keywords.include?(current_token[:value])
+        advance
+        true
+      else
+        # Only add error if we haven't reached end of file
+        if @position < @tokens.length
+          add_error("Expected #{keywords.join(' or ')} to close block")
+        end
+        false
+      end
+    end
+
+    # Helper method to parse comma-separated loop variables
+    # Used by for loops with brackets or parentheses
+    def parse_loop_variables
+      loop_vars = []
+
+      loop do
+        if current_token && (current_token[:type] == :identifier ||
+                            current_token[:type] == :local_variable ||
+                            current_token[:type] == :global_variable ||
+                            current_token[:type] == :script_local)
+          loop_vars << advance
+        else
+          add_error("Expected identifier in for loop variables")
+          break
+        end
+
+        if current_token && current_token[:type] == :comma
+          advance # Skip ','
+        else
+          break
+        end
+      end
+
+      loop_vars
+    end
+
+    # Helper method to expect 'in' keyword in for loops
+    def expect_in_keyword
+      if !current_token || (current_token[:type] != :identifier || current_token[:value] != 'in')
+        add_error("Expected 'in' after for loop variables")
+      else
+        advance # Skip 'in'
+      end
+    end
+
     def parse_program
       statements = []
 
@@ -427,80 +516,7 @@ module Vinter
       }
     end
 
-    def old_parse_filter_command
-      token = advance # Skip 'filter' or 'filt'
-      line = token[:line]
-      column = token[:column]
 
-      # Check for bang (!)
-      has_bang = false
-      if current_token && current_token[:type] == :operator && current_token[:value] == '!'
-        has_bang = true
-        advance # Skip '!'
-      end
-
-      # Parse the pattern
-      pattern = nil
-      pattern_delimiter = nil
-
-      if current_token && current_token[:type] == :operator && current_token[:value] == '/'
-        # Handle /pattern/ form
-        pattern_delimiter = '/'
-        advance # Skip opening delimiter
-
-        # Collect all tokens until closing delimiter
-        pattern_parts = []
-        while @position < @tokens.length &&
-              !(current_token[:type] == :operator && current_token[:value] == pattern_delimiter)
-          pattern_parts << current_token[:value]
-          advance
-        end
-
-        pattern = pattern_parts.join('')
-
-        # Skip closing delimiter
-        if current_token && current_token[:type] == :operator && current_token[:value] == pattern_delimiter
-          advance
-        else
-          @errors << {
-            message: "Expected closing pattern delimiter: #{pattern_delimiter}",
-            position: @position,
-            line: current_token ? current_token[:line] : 0,
-            column: current_token ? current_token[:column] : 0
-          }
-        end
-      else
-        # Handle direct pattern form (without delimiters)
-        # Parse until we see what appears to be the command
-        pattern_parts = []
-        while @position < @tokens.length
-          # Don't consume tokens that likely belong to the command part
-          if current_token[:type] == :keyword ||
-             (current_token[:type] == :identifier &&
-              ['echo', 'let', 'execute', 'exec', 'autocmd', 'au', 'oldfiles', 'clist', 'command',
-               'files', 'highlight', 'jumps', 'list', 'llist', 'marks', 'registers', 'set'].include?(current_token[:value]))
-            break
-          end
-
-          pattern_parts << current_token[:value]
-          advance
-        end
-
-        pattern = pattern_parts.join('').strip
-      end
-
-      # Parse the command to be filtered
-      command = parse_statement
-
-      {
-        type: :filter_command,
-        pattern: pattern,
-        has_bang: has_bang,
-        command: command,
-        line: line,
-        column: column
-      }
-    end
 
     def parse_augroup_statement
       token = advance # Skip 'augroup'
@@ -513,18 +529,11 @@ module Vinter
         name = current_token[:value]
         advance
       else
-        @errors << {
-          message: "Expected augroup name",
-          position: @position,
-          line: current_token ? current_token[:line] : 0,
-          column: current_token ? current_token[:column] : 0
-        }
+        add_error("Expected augroup name")
       end
 
       # Check for augroup END
-      is_end_marker = false
-      if name && (name.upcase == "END" || name == "END")
-        is_end_marker = true
+      if name && name.upcase == "END"
         return {
           type: :augroup_end,
           line: line,
@@ -540,8 +549,7 @@ module Vinter
            (current_token[:type] == :identifier && current_token[:value] == 'augroup')
           # Look ahead for END
           if peek_token &&
-             ((peek_token[:type] == :identifier &&
-               (peek_token[:value].upcase == 'END' || peek_token[:value] == 'END')) ||
+             ((peek_token[:type] == :identifier && peek_token[:value].upcase == 'END') ||
               (peek_token[:type] == :keyword && peek_token[:value].upcase == 'END'))
             advance # Skip 'augroup'
             advance # Skip 'END'
@@ -619,12 +627,7 @@ module Vinter
                 column: dot_token[:column]
               }
             else
-              @errors << {
-                message: "Expected property name after '.'",
-                position: @position,
-                line: current_token ? current_token[:line] : 0,
-                column: current_token ? current_token[:column] : 0
-              }
+              add_error("Expected property name after '.'")
             end
           end
 
@@ -684,12 +687,7 @@ module Vinter
               }
               advance
             else
-              @errors << {
-                message: "Expected variable name in destructuring assignment",
-                position: @position,
-                line: current_token ? current_token[:line] : 0,
-                column: current_token ? current_token[:column] : 0
-              }
+              add_error("Expected variable name in destructuring assignment")
               # Try to recover by advancing to next comma or closing bracket
               while current_token && current_token[:type] != :comma && current_token[:type] != :bracket_close
                 advance
@@ -706,12 +704,7 @@ module Vinter
             column: bracket_token[:column]
           }
         else
-          @errors << {
-            message: "Expected variable name after let",
-            position: @position,
-            line: current_token ? current_token[:line] : 0,
-            column: current_token ? current_token[:column] : 0
-          }
+          add_error("Expected variable name after let")
         end
       end
 
@@ -723,12 +716,7 @@ module Vinter
         operator = current_token[:value]
         advance
       else
-        @errors << {
-          message: "Expected assignment operator after variable in let statement",
-          position: @position,
-          line: current_token ? current_token[:line] : 0,
-          column: current_token ? current_token[:column] : 0
-        }
+        add_error("Expected assignment operator after variable in let statement")
       end
 
       # Parse the value expression
@@ -748,12 +736,7 @@ module Vinter
             func_name = current_token[:value]
             advance
           else
-            @errors << {
-              message: "Expected string with function name in function() call",
-              position: @position,
-              line: current_token ? current_token[:line] : 0,
-              column: current_token ? current_token[:column] : 0
-            }
+            add_error("Expected string with function name in function() call")
           end
 
           # Expect closing parenthesis
@@ -972,32 +955,14 @@ module Vinter
           advance # Skip the pipe
 
           # Expect endif
-          if current_token && current_token[:type] == :keyword && current_token[:value] == 'endif'
-            advance # Skip 'endif'
-          else
-            @errors << {
-              message: "Expected 'endif' after '|' in one-line if statement",
-              position: @position,
-              line: current_token ? current_token[:line] : 0,
-              column: current_token ? current_token[:column] : 0
-            }
+          unless expect_keyword('endif')
+            add_error("Expected 'endif' after '|' in one-line if statement")
           end
         end
       else
-        # This is a regular multi-line if statement
-        # Continue with your existing logic for parsing normal if statements
-
-        # Parse statements until we hit 'else', 'elseif', or 'endif'
-        while @position < @tokens.length
-          # Check for the tokens that would terminate this block
-          if current_token && current_token[:type] == :keyword &&
-             ['else', 'elseif', 'endif'].include?(current_token[:value])
-            break
-          end
-
-          stmt = parse_statement
-          then_branch << stmt if stmt
-        end
+        # Parse multi-line if statement
+        # Parse statements until 'else', 'elseif', or 'endif'
+        then_branch = parse_body_until('else', 'elseif', 'endif')
 
         # Check for else/elseif
         if current_token && current_token[:type] == :keyword
@@ -1005,14 +970,7 @@ module Vinter
             advance # Skip 'else'
 
             # Parse statements until 'endif'
-            while @position < @tokens.length
-              if current_token[:type] == :keyword && current_token[:value] == 'endif'
-                break
-              end
-
-              stmt = parse_statement
-              else_branch << stmt if stmt
-            end
+            else_branch = parse_body_until('endif')
           elsif current_token[:value] == 'elseif'
             elseif_stmt = parse_if_statement
             else_branch << elseif_stmt if elseif_stmt
@@ -1029,19 +987,7 @@ module Vinter
         end
 
         # Expect endif
-        if current_token && current_token[:type] == :keyword && current_token[:value] == 'endif'
-          advance # Skip 'endif'
-        else
-          # Don't add an error if we've already reached the end of the file
-          if @position < @tokens.length
-            @errors << {
-              message: "Expected 'endif' to close if statement",
-              position: @position,
-              line: current_token ? current_token[:line] : 0,
-              column: current_token ? current_token[:column] : 0
-            }
-          end
-        end
+        expect_end_keyword('endif')
       end
 
       {
@@ -1061,20 +1007,11 @@ module Vinter
       column = token[:column]
       condition = parse_expression
 
-      body = []
-
-      # Parse statements until we hit 'endwhile'
-      while @position < @tokens.length
-        if current_token[:type] == :keyword && current_token[:value] == 'endwhile'
-          break
-        end
-
-        stmt = parse_statement
-        body << stmt if stmt
-      end
+      # Parse statements until 'endwhile'
+      body = parse_body_until('endwhile')
 
       # Expect endwhile
-      expect(:keyword) # This should be 'endwhile'
+      expect_end_keyword('endwhile')
 
       {
         type: :while_statement,
@@ -1090,166 +1027,22 @@ module Vinter
       line = token[:line]
       column = token[:column]
 
-      # Two main patterns:
-      # 1. for [key, val] in dict - destructuring with bracket_open
-      # 2. for var in list - simple variable with identifier
+      # Determine the type of for loop and parse variables accordingly
+      loop_var = nil
+      loop_vars = nil
 
       if current_token && current_token[:type] == :bracket_open
-        # Handle destructuring assignment: for [key, val] in dict
+        # Handle destructuring with brackets: for [key, val] in dict
         advance # Skip '['
-
-        loop_vars = []
-
-        loop do
-          if current_token && (current_token[:type] == :identifier ||
-                              current_token[:type] == :local_variable ||
-                              current_token[:type] == :global_variable ||
-                              current_token[:type] == :script_local)
-            loop_vars << advance
-          else
-            @errors << {
-              message: "Expected identifier in for loop variables",
-              position: @position,
-              line: current_token ? current_token[:line] : 0,
-              column: current_token ? current_token[:column] : 0
-            }
-            break
-          end
-
-          if current_token && current_token[:type] == :comma
-            advance # Skip ','
-          else
-            break
-          end
-        end
-
-        expect(:bracket_close) # Skip ']'
-
-        if !current_token || (current_token[:type] != :identifier || current_token[:value] != 'in')
-          @errors << {
-            message: "Expected 'in' after for loop variables",
-            position: @position,
-            line: current_token ? current_token[:line] : 0,
-            column: current_token ? current_token[:column] : 0
-          }
-        else
-          advance # Skip 'in'
-        end
-
-        iterable = parse_expression
-
-        # Parse the body until 'endfor'
-        body = []
-        while @position < @tokens.length
-          if current_token && current_token[:type] == :keyword && current_token[:value] == 'endfor'
-            break
-          end
-
-          stmt = parse_statement
-          body << stmt if stmt
-        end
-
-        # Expect endfor
-        if current_token && current_token[:type] == :keyword && current_token[:value] == 'endfor'
-          advance # Skip 'endfor'
-        else
-          # Only add an error if we haven't reached the end of the file
-          if @position < @tokens.length
-            @errors << {
-              message: "Expected 'endfor' to close for statement",
-              position: @position,
-              line: current_token ? current_token[:line] : 0,
-              column: current_token ? current_token[:column] : 0
-            }
-          end
-        end
-
-        return {
-          type: :for_statement,
-          loop_vars: loop_vars,
-          iterable: iterable,
-          body: body,
-          line: line,
-          column: column
-        }
+        loop_vars = parse_loop_variables
+        expect(:bracket_close)
+        expect_in_keyword
       elsif current_token && current_token[:type] == :paren_open
-        # Handle multiple variables in parentheses: for (var1, var2) in list
+        # Handle multiple variables with parentheses: for (var1, var2) in list
         advance # Skip '('
-
-        loop_vars = []
-
-        loop do
-          if current_token && (current_token[:type] == :identifier ||
-                              current_token[:type] == :local_variable ||
-                              current_token[:type] == :global_variable ||
-                              current_token[:type] == :script_local)
-            loop_vars << advance
-          else
-            @errors << {
-              message: "Expected identifier in for loop variables",
-              position: @position,
-              line: current_token ? current_token[:line] : 0,
-              column: current_token ? current_token[:column] : 0
-            }
-            break
-          end
-
-          if current_token && current_token[:type] == :comma
-            advance # Skip ','
-          else
-            break
-          end
-        end
-
-        expect(:paren_close) # Skip ')'
-
-        if !current_token || (current_token[:type] != :identifier || current_token[:value] != 'in')
-          @errors << {
-            message: "Expected 'in' after for loop variables",
-            position: @position,
-            line: current_token ? current_token[:line] : 0,
-            column: current_token ? current_token[:column] : 0
-          }
-        else
-          advance # Skip 'in'
-        end
-
-        iterable = parse_expression
-
-        # Parse the body until 'endfor'
-        body = []
-        while @position < @tokens.length
-          if current_token && current_token[:type] == :keyword && current_token[:value] == 'endfor'
-            break
-          end
-
-          stmt = parse_statement
-          body << stmt if stmt
-        end
-
-        # Expect endfor
-        if current_token && current_token[:type] == :keyword && current_token[:value] == 'endfor'
-          advance # Skip 'endfor'
-        else
-          # Only add an error if we haven't reached the end of the file
-          if @position < @tokens.length
-            @errors << {
-              message: "Expected 'endfor' to close for statement",
-              position: @position,
-              line: current_token ? current_token[:line] : 0,
-              column: current_token ? current_token[:column] : 0
-            }
-          end
-        end
-
-        return {
-          type: :for_statement,
-          loop_vars: loop_vars,
-          iterable: iterable,
-          body: body,
-          line: line,
-          column: column
-        }
+        loop_vars = parse_loop_variables
+        expect(:paren_close)
+        expect_in_keyword
       else
         # Handle single variable: for var in list
         if current_token && (current_token[:type] == :identifier ||
@@ -1258,63 +1051,36 @@ module Vinter
                             current_token[:type] == :script_local)
           loop_var = advance
         else
-          @errors << {
-            message: "Expected identifier as for loop variable",
-            position: @position,
-            line: current_token ? current_token[:line] : 0,
-            column: current_token ? current_token[:column] : 0
-          }
-          loop_var = nil
+          add_error("Expected identifier as for loop variable")
         end
-
-        if !current_token || (current_token[:type] != :identifier || current_token[:value] != 'in')
-          @errors << {
-            message: "Expected 'in' after for loop variable",
-            position: @position,
-            line: current_token ? current_token[:line] : 0,
-            column: current_token ? current_token[:column] : 0
-          }
-        else
-          advance # Skip 'in'
-        end
-
-        iterable = parse_expression
-
-        # Parse the body until 'endfor'
-        body = []
-        while @position < @tokens.length
-          if current_token && current_token[:type] == :keyword && current_token[:value] == 'endfor'
-            break
-          end
-
-          stmt = parse_statement
-          body << stmt if stmt
-        end
-
-        # Expect endfor
-        if current_token && current_token[:type] == :keyword && current_token[:value] == 'endfor'
-          advance # Skip 'endfor'
-        else
-          # Only add an error if we haven't reached the end of the file
-          if @position < @tokens.length
-            @errors << {
-              message: "Expected 'endfor' to close for statement",
-              position: @position,
-              line: current_token ? current_token[:line] : 0,
-              column: current_token ? current_token[:column] : 0
-            }
-          end
-        end
-
-        return {
-          type: :for_statement,
-          loop_var: loop_var,
-          iterable: iterable,
-          body: body,
-          line: line,
-          column: column
-        }
+        expect_in_keyword
       end
+
+      # Parse the iterable expression
+      iterable = parse_expression
+
+      # Parse the body until 'endfor'
+      body = parse_body_until('endfor')
+
+      # Expect endfor
+      expect_end_keyword('endfor')
+
+      # Build result hash based on whether we have single or multiple vars
+      result = {
+        type: :for_statement,
+        iterable: iterable,
+        body: body,
+        line: line,
+        column: column
+      }
+
+      if loop_vars
+        result[:loop_vars] = loop_vars
+      else
+        result[:loop_var] = loop_var
+      end
+
+      result
     end
 
     def parse_def_function
@@ -1336,19 +1102,11 @@ module Vinter
         return_type = parse_type
       end
 
-      # Parse function body
-      body = []
-      while @position < @tokens.length
-        if current_token[:type] == :keyword && current_token[:value] == 'enddef'
-          break
-        end
-
-        stmt = parse_statement
-        body << stmt if stmt
-      end
+      # Parse function body until 'enddef'
+      body = parse_body_until('enddef')
 
       # Expect enddef
-      expect(:keyword) # This should be 'enddef'
+      expect_end_keyword('enddef')
 
       {
         type: :def_function,
@@ -1391,12 +1149,7 @@ module Vinter
 
           # After varargs, we expect closing paren
           if current_token && current_token[:type] != :paren_close
-            @errors << {
-              message: "Expected closing parenthesis after varargs",
-              position: @position,
-              line: current_token[:line],
-              column: current_token[:column]
-            }
+            add_error("Expected closing parenthesis after varargs", current_token)
           end
 
           break
@@ -1404,12 +1157,7 @@ module Vinter
 
         # Get parameter name
         if !current_token || current_token[:type] != :identifier
-          @errors << {
-            message: "Expected parameter name",
-            position: @position,
-            line: current_token ? current_token[:line] : 0,
-            column: current_token ? current_token[:column] : 0
-          }
+          add_error("Expected parameter name")
           break
         end
 
@@ -1444,12 +1192,7 @@ module Vinter
           advance
         # If we don't have a comma, we should have a closing paren
         elsif current_token && current_token[:type] != :paren_close
-          @errors << {
-            message: "Expected comma or closing parenthesis after parameter",
-            position: @position,
-            line: current_token[:line],
-            column: current_token[:column]
-          }
+          add_error("Expected comma or closing parenthesis after parameter", current_token)
           break
         end
       end
@@ -1479,11 +1222,7 @@ module Vinter
         return type_name[:value]
       else
         @errors << {
-          message: "Expected type identifier",
-          position: @position,
-          line: current_token ? current_token[:line] : 0,
-          column: current_token ? current_token[:column] : 0
-        }
+          add_error("Expected type identifier")
         advance
         return "unknown"
       end
@@ -1496,12 +1235,7 @@ module Vinter
       column = var_type_token[:column]
 
       if !current_token || current_token[:type] != :identifier
-        @errors << {
-          message: "Expected variable name",
-          position: @position,
-          line: current_token ? current_token[:line] : 0,
-          column: current_token ? current_token[:column] : 0
-        }
+        add_error("Expected variable name")
         return nil
       end
 
@@ -3296,33 +3030,11 @@ module Vinter
         end
       end
 
-      # Parse function body
-      body = []
-      while @position < @tokens.length
-        if current_token && current_token[:type] == :keyword &&
-           ['endfunction', 'endfunc'].include?(current_token[:value])
-          break
-        end
-
-        stmt = parse_statement
-        body << stmt if stmt
-      end
+      # Parse function body until 'endfunction' or 'endfunc'
+      body = parse_body_until('endfunction', 'endfunc')
 
       # Expect endfunction/endfunc
-      if current_token && current_token[:type] == :keyword && 
-         ['endfunction', 'endfunc'].include?(current_token[:value])
-        advance # Skip 'endfunction' or 'endfunc'
-      else
-        # Only add an error if we haven't reached the end of the file
-        if @position < @tokens.length
-          @errors << {
-            message: "Expected 'endfunction' or 'endfunc'",
-            position: @position,
-            line: current_token ? current_token[:line] : 0,
-            column: current_token ? current_token[:column] : 0
-          }
-        end
-      end
+      expect_end_keyword('endfunction', 'endfunc')
 
       function_name = name ? name[:value] : nil
       if function_scope
@@ -3508,21 +3220,11 @@ module Vinter
       line = token[:line]
       column = token[:column]
 
-      # Parse the try body
-      body = []
+      # Parse the try body until catch/finally/endtry
+      body = parse_body_until('catch', 'finally', 'endtry')
+      
       catch_clauses = []
       finally_clause = nil
-
-      # Parse statements in the try block
-      while @position < @tokens.length
-        if current_token && current_token[:type] == :keyword &&
-           ['catch', 'finally', 'endtry'].include?(current_token[:value])
-          break
-        end
-
-        stmt = parse_statement
-        body << stmt if stmt
-      end
 
       # Parse catch clauses
       while @position < @tokens.length &&
@@ -3549,17 +3251,8 @@ module Vinter
           advance
         end
 
-        # Parse the catch body
-        catch_body = []
-        while @position < @tokens.length
-          if current_token && current_token[:type] == :keyword &&
-             ['catch', 'finally', 'endtry'].include?(current_token[:value])
-            break
-          end
-
-          stmt = parse_statement
-          catch_body << stmt if stmt
-        end
+        # Parse the catch body until next catch/finally/endtry
+        catch_body = parse_body_until('catch', 'finally', 'endtry')
 
         catch_clauses << {
           type: :catch_clause,
@@ -3578,16 +3271,8 @@ module Vinter
         finally_line = finally_token[:line]
         finally_column = finally_token[:column]
 
-        # Parse the finally body
-        finally_body = []
-        while @position < @tokens.length
-          if current_token && current_token[:type] == :keyword && current_token[:value] == 'endtry'
-            break
-          end
-
-          stmt = parse_statement
-          finally_body << stmt if stmt
-        end
+        # Parse the finally body until 'endtry'
+        finally_body = parse_body_until('endtry')
 
         finally_clause = {
           type: :finally_clause,
@@ -3598,19 +3283,7 @@ module Vinter
       end
 
       # Expect endtry
-      if current_token && current_token[:type] == :keyword && current_token[:value] == 'endtry'
-        advance # Skip 'endtry'
-      else
-        # Only add an error if we haven't reached the end of the file
-        if @position < @tokens.length
-          @errors << {
-            message: "Expected 'endtry' to close try statement",
-            position: @position,
-            line: current_token ? current_token[:line] : 0,
-            column: current_token ? current_token[:column] : 0
-          }
-        end
-      end
+      expect_end_keyword('endtry')
 
       return {
         type: :try_statement,
