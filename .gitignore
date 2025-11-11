@@ -50,3 +50,8 @@ Thumbs.db
 
 # Specific to your project
 Gemfile.lock
+
+# Plugin linting script outputs
+tmp_plugin_tests/
+lint_results.txt
+*_lint.log
