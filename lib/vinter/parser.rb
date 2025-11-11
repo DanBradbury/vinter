@@ -627,12 +627,7 @@ module Vinter
                 column: dot_token[:column]
               }
             else
-              @errors << {
-                message: "Expected property name after '.'",
-                position: @position,
-                line: current_token ? current_token[:line] : 0,
-                column: current_token ? current_token[:column] : 0
-              }
+              add_error("Expected property name after '.'")
             end
           end
 
@@ -692,12 +687,7 @@ module Vinter
               }
               advance
             else
-              @errors << {
-                message: "Expected variable name in destructuring assignment",
-                position: @position,
-                line: current_token ? current_token[:line] : 0,
-                column: current_token ? current_token[:column] : 0
-              }
+              add_error("Expected variable name in destructuring assignment")
               # Try to recover by advancing to next comma or closing bracket
               while current_token && current_token[:type] != :comma && current_token[:type] != :bracket_close
                 advance
@@ -714,12 +704,7 @@ module Vinter
             column: bracket_token[:column]
           }
         else
-          @errors << {
-            message: "Expected variable name after let",
-            position: @position,
-            line: current_token ? current_token[:line] : 0,
-            column: current_token ? current_token[:column] : 0
-          }
+          add_error("Expected variable name after let")
         end
       end
 
@@ -731,12 +716,7 @@ module Vinter
         operator = current_token[:value]
         advance
       else
-        @errors << {
-          message: "Expected assignment operator after variable in let statement",
-          position: @position,
-          line: current_token ? current_token[:line] : 0,
-          column: current_token ? current_token[:column] : 0
-        }
+        add_error("Expected assignment operator after variable in let statement")
       end
 
       # Parse the value expression
@@ -756,12 +736,7 @@ module Vinter
             func_name = current_token[:value]
             advance
           else
-            @errors << {
-              message: "Expected string with function name in function() call",
-              position: @position,
-              line: current_token ? current_token[:line] : 0,
-              column: current_token ? current_token[:column] : 0
-            }
+            add_error("Expected string with function name in function() call")
           end
 
           # Expect closing parenthesis
@@ -1174,12 +1149,7 @@ module Vinter
 
           # After varargs, we expect closing paren
           if current_token && current_token[:type] != :paren_close
-            @errors << {
-              message: "Expected closing parenthesis after varargs",
-              position: @position,
-              line: current_token[:line],
-              column: current_token[:column]
-            }
+            add_error("Expected closing parenthesis after varargs", current_token)
           end
 
           break
@@ -1187,12 +1157,7 @@ module Vinter
 
         # Get parameter name
         if !current_token || current_token[:type] != :identifier
-          @errors << {
-            message: "Expected parameter name",
-            position: @position,
-            line: current_token ? current_token[:line] : 0,
-            column: current_token ? current_token[:column] : 0
-          }
+          add_error("Expected parameter name")
           break
         end
 
@@ -1227,12 +1192,7 @@ module Vinter
           advance
         # If we don't have a comma, we should have a closing paren
         elsif current_token && current_token[:type] != :paren_close
-          @errors << {
-            message: "Expected comma or closing parenthesis after parameter",
-            position: @position,
-            line: current_token[:line],
-            column: current_token[:column]
-          }
+          add_error("Expected comma or closing parenthesis after parameter", current_token)
           break
         end
       end
@@ -1262,11 +1222,7 @@ module Vinter
         return type_name[:value]
       else
         @errors << {
-          message: "Expected type identifier",
-          position: @position,
-          line: current_token ? current_token[:line] : 0,
-          column: current_token ? current_token[:column] : 0
-        }
+          add_error("Expected type identifier")
         advance
         return "unknown"
       end
@@ -1279,12 +1235,7 @@ module Vinter
       column = var_type_token[:column]
 
       if !current_token || current_token[:type] != :identifier
-        @errors << {
-          message: "Expected variable name",
-          position: @position,
-          line: current_token ? current_token[:line] : 0,
-          column: current_token ? current_token[:column] : 0
-        }
+        add_error("Expected variable name")
         return nil
       end
 
