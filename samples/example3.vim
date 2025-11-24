@@ -1,28 +1,39 @@
 vim9script
 
-# Example with classes and objects (vim9script features)
+# Example with conditional logic and string operations
 
-var buffer_config: dict<any> = {
-  tabstop: 4,
-  expandtab: true,
-  number: true
-}
+var isEnabled: bool = true
+var errorMessage: string = ''
 
-def SetupBuffer(): void
-  for [key, value] in items(buffer_config)
-    execute $'setlocal {key}={value}'
-  endfor
+def CheckStatus(): bool
+  return isEnabled
 enddef
 
-def CreateBuffer(name: string): number
-  execute $'new {name}'
-  return bufnr('%')
+def SetError(message: string): void
+  errorMessage = message
+  isEnabled = false
 enddef
 
-def ProcessItems(items: list<string>, callback: func(string): string): list<string>
-  var results: list<string> = []
-  for item in items
-    results->add(callback(item))
-  endfor
-  return results
+def ClearError(): void
+  errorMessage = ''
+  isEnabled = true
+enddef
+
+def FormatMessage(prefix: string, message: string): string
+  return prefix .. ': ' .. message
+enddef
+
+def ValidateInput(input: string): bool
+  if len(input) == 0
+    SetError('Input cannot be empty')
+    return false
+  endif
+  
+  if len(input) > 100
+    SetError('Input too long')
+    return false
+  endif
+  
+  ClearError()
+  return true
 enddef

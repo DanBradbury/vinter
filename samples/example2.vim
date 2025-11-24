@@ -1,26 +1,30 @@
 vim9script
 
-# Example with lists and dictionaries
+# Example with control flow and loops
 
-var names: list<string> = ['Alice', 'Bob', 'Charlie']
-var scores: dict<number> = {Alice: 95, Bob: 87, Charlie: 92}
+var counter: number = 0
+const MAX_ITERATIONS: number = 10
 
-def GetTopScore(): number
-  var maxScore: number = 0
-  for score in values(scores)
-    if score > maxScore
-      maxScore = score
-    endif
-  endfor
-  return maxScore
+def IncrementCounter(): void
+  counter += 1
 enddef
 
-def FilterNames(minLength: number): list<string>
-  var filtered: list<string> = []
-  for name in names
-    if len(name) >= minLength
-      filtered->add(name)
-    endif
-  endfor
-  return filtered
+def GetCounter(): number
+  return counter
+enddef
+
+def CountToMax(): void
+  while counter < MAX_ITERATIONS
+    IncrementCounter()
+  endwhile
+enddef
+
+def Sum(start: number, end: number): number
+  var total: number = 0
+  var i: number = start
+  while i <= end
+    total += i
+    i += 1
+  endwhile
+  return total
 enddef
