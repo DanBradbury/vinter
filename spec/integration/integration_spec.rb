@@ -16,59 +16,62 @@ RSpec.describe 'Vinter Integration Tests' do
     end
 
     context 'invalid vim9 script' do
-      it 'identifies multiple rule violations in poorly-formed Vim9 script' do
+      it 'rejects files without vim9script declaration' do
         file_path = File.join(fixtures_path, 'invalid_vim9.vim')
         content = File.read(file_path)
         issues = linter.lint(content)
 
-        expect(issues.size).to be >= 4  # At least 4 issues should be found
+        # Should immediately reject due to missing vim9script
+        expect(issues.size).to eq(1)
+        expect(issues[0][:type]).to eq(:error)
+        expect(issues[0][:message]).to include("vim9script")
+      end
+    end
 
-        # Check specific issues
-        expect(issues.any? { |i| i[:rule] == "missing-vim9script-declaration" }).to be true
+    context 'vim9 script with type issues' do
+      it 'identifies type annotation violations in Vim9 script' do
+        file_path = File.join(fixtures_path, 'vim9_with_issues.vim')
+        content = File.read(file_path)
+        issues = linter.lint(content)
+
+        # Check for type annotation issues
         expect(issues.any? { |i| i[:rule] == "missing-type-annotation" }).to be true
-        expect(issues.any? { |i| i[:rule] == "prefer-def-over-function" }).to be true
         expect(issues.any? { |i| i[:rule] == "missing-return-type" }).to be true
       end
     end
   end
 
-  describe 'legacy VimScript linting' do
-    context 'legacy script compatibility' do
-      # TODO: Legacy script linting has known issues - needs parser enhancement
-      xit 'handles legacy vim script without errors' do
+  describe 'legacy VimScript rejection' do
+    context 'legacy script files' do
+      it 'rejects legacy vim script files without vim9script' do
         file_path = File.join(fixtures_path, 'legacy.vim')
         content = File.read(file_path)
 
-        issues = linter.lint(content).select { |f| [:error, :warning].include?(f[:type]) }
-        expect(issues.size).to eq(0), "Expected no issues but found: #{issues.inspect}"
+        issues = linter.lint(content)
+        
+        # Should reject because it doesn't start with vim9script
+        expect(issues.size).to eq(1)
+        expect(issues[0][:type]).to eq(:error)
+        expect(issues[0][:message]).to include("vim9script")
       end
     end
 
-    context 'backslash line continuations' do
-      it 'parses files with backslash line continuations without warnings' do
-        file_path = File.join(fixtures_path, 'isolated.vim')
+    context 'legacy function syntax' do
+      it 'detects legacy function syntax in vim9script files' do
+        file_path = File.join(fixtures_path, 'vim9_with_legacy_function.vim')
         content = File.read(file_path)
 
-        issues = linter.lint(content).select { |f| [:error, :warning].include?(f[:type]) }
-        expect(issues.size).to eq(0), "Expected no issues but found: #{issues.inspect}"
+        issues = linter.lint(content)
+        
+        expect(issues.any? { |i| i[:rule] == "no-legacy-function" }).to be true
       end
     end
   end
 
-  describe 'complex real-world files' do
-    context 'copilot chat script' do
-      it 'parses copilot chat vim file without errors' do
-        file_path = File.join(fixtures_path, 'copilot_chat.vim')
-        content = File.read(file_path)
-        issues = linter.lint(content).select { |f| [:error, :warning].include?(f[:type]) }
-        
-        expect(issues.size).to eq(0), "Expected no issues but found: #{issues.inspect}"
-      end
-    end
-
-    context 'vim features script' do
-      it 'parses vim features file without errors' do
-        file_path = File.join(fixtures_path, 'features.vim')
+  describe 'complex vim9script files' do
+    context 'vim9 features script' do
+      it 'parses vim9 features file without errors' do
+        file_path = File.join(fixtures_path, 'vim9_features.vim')
         content = File.read(file_path)
         issues = linter.lint(content).select { |f| [:error, :warning].include?(f[:type]) }
         
