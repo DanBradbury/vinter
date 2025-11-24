@@ -15,28 +15,6 @@ module Vinter
     end
 
     def register_default_rules
-      # Rule: Vim9 script files should start with vim9script declaration
-      register_rule(Rule.new("missing-vim9script-declaration", "Script does not start with vim9script declaration") do |ast|
-        if ast[:type] == :program && (ast[:body].empty? || ast[:body][0][:type] != :vim9script_declaration)
-          [{ message: "File should start with vim9script declaration", line: 1, column: 1 }]
-        else
-          []
-        end
-      end)
-
-      # Rule: Prefer def over function in Vim9 script
-      register_rule(Rule.new("prefer-def-over-function", "Use def instead of function in Vim9 script") do |ast|
-        issues = []
-
-        traverse_ast(ast) do |node|
-          if node[:type] == :legacy_function
-            issues << { message: "Use def instead of function for #{node[:name]}", line: node[:line] || 0, column: node[:column] || 0 }
-          end
-        end
-
-        issues
-      end)
-
       # Rule: Variables should have type annotations
       register_rule(Rule.new("missing-type-annotation", "Variable declaration is missing type annotation") do |ast|
         issues = []
@@ -79,6 +57,19 @@ module Vinter
 
         issues
       end)
+      
+      # Rule: Legacy function syntax is not allowed
+      register_rule(Rule.new("no-legacy-function", "Legacy function syntax is not supported in vim9script-only mode") do |ast|
+        issues = []
+
+        traverse_ast(ast) do |node|
+          if node[:type] == :legacy_function
+            issues << { message: "Legacy function syntax is not allowed. Use 'def' instead of 'function'.", line: node[:line] || 0, column: node[:column] || 0 }
+          end
+        end
+
+        issues
+      end)
     end
 
     def traverse_ast(node, &block)
@@ -96,6 +87,41 @@ module Vinter
     end
 
     def lint(content)
+      # Check for vim9script declaration at the start of the file
+      # Skip empty lines and comments, but the first actual statement must be vim9script
+      lines = content.lines
+      found_vim9script = false
+      
+      lines.each_with_index do |line, idx|
+        trimmed = line.strip
+        # Skip empty lines and comments
+        next if trimmed.empty? || trimmed.start_with?('#') || trimmed.start_with?('"')
+        
+        # First non-empty, non-comment line must be vim9script
+        if trimmed.start_with?('vim9script')
+          found_vim9script = true
+          break
+        else
+          # Found a non-vim9script statement first - reject the file
+          return [{
+            type: :error,
+            message: "File must start with vim9script declaration. Only vim9script files are supported.",
+            line: idx + 1,
+            column: 1
+          }]
+        end
+      end
+      
+      # If we didn't find vim9script at all, that's also an error
+      unless found_vim9script
+        return [{
+          type: :error,
+          message: "File must start with vim9script declaration. Only vim9script files are supported.",
+          line: 1,
+          column: 1
+        }]
+      end
+
       lexer = Lexer.new(content)
       tokens = lexer.tokenize
 

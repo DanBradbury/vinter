@@ -1,8 +1,8 @@
 Gem::Specification.new do |s|
   s.name        = "vinter"
-  s.version     = "0.4.0"
-  s.summary     = "A linter for leagacy + Vim9 script"
-  s.description = "A linter for the Vim9 script language, helping to identify issues and enforce best practices"
+  s.version     = "0.5.0"
+  s.summary     = "A linter for Vim9 script"
+  s.description = "A linter for the Vim9 script language, helping to identify issues and enforce best practices. Vim9script only - legacy VimScript is not supported."
   s.authors     = ["Dan Bradbury"]
   s.email       = "dan.luckydaisy@gmail.com"
   s.files       = Dir["lib/**/*.rb", "bin/*", "README.md", "LICENSE"]

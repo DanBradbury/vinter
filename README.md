@@ -1,6 +1,6 @@
 # Vinter
 
-A Ruby gem that provides linting capabilities for Vim9 script files. This linter helps identify syntax errors and enforce best practices for for Vim9 script.
+A Ruby gem that provides linting capabilities for Vim9 script files. This linter helps identify syntax errors and enforce best practices for Vim9 script. **Note: This linter only supports vim9script. Files must start with `vim9script` declaration.**
 
 ## Installation
 
@@ -17,19 +17,21 @@ Vinter will read config files on the following priority order
 
 ```yaml
 ignore_rules:
-  - missing-vim9script-declaration
-  - prefer-def-over-function
+  - missing-type-annotation
+  - missing-param-type
 ```
 
 ## Usage
 
 ### Command Line
 
-Updated vim linter for legacy and vim9script
+Vim9script linter - checks vim9script files for syntax errors and best practices.
 
 ```bash
 vinter path/to/your/script.vim
 ```
+
+**Important:** All files must start with `vim9script` declaration. Legacy VimScript is not supported.
 
 ### Ruby API
 
@@ -49,10 +51,10 @@ end
 
 The linter includes several built-in rules:
 
-1. **missing-vim9script-declaration**: Checks if Vim9 script files start with the required `vim9script` declaration
-2. **prefer-def-over-function**: Encourages using `def` instead of `function` in Vim9 scripts
-3. **missing-type-annotation**: Identifies variable declarations without type annotations
-4. **missing-return-type**: Identifies functions without return type annotations
+1. **missing-type-annotation**: Identifies variable declarations without type annotations
+2. **missing-return-type**: Identifies functions without return type annotations
+3. **missing-param-type**: Identifies function parameters without type annotations
+4. **no-legacy-function**: Rejects legacy `function` syntax (use `def` instead)
 
 ## Adding Custom Rules
 
