@@ -424,6 +424,11 @@ module Vinter
         parse_delete_command
       elsif current_token[:type] == :percentage
         parse_range_command
+      elsif current_token[:type] == :global_variable
+        parse_global_variable
+      elsif current_token[:type] == :vimfuncs
+        advance
+        parse_function_call(current_token[:value], current_token[:line], current_token[:column])
       else
         @warnings << {
           message: "Unexpected token type: #{current_token[:type]}",
@@ -434,6 +439,76 @@ module Vinter
         advance
         nil
       end
+    end
+
+    def parse_global_variable
+      token = current_token
+      line = token[:line]
+      column = token[:column]
+      name = token[:value]
+      advance # Skip the global variable token
+
+      # Handle property access (e.g., g:foo.bar)
+      target = {
+        type: :global_variable,
+        name: name,
+        line: line,
+        column: column
+      }
+
+      # Property access (dot notation)
+      if current_token && current_token[:type] == :operator && current_token[:value] == '.'
+        dot_token = advance
+        if current_token && (current_token[:type] == :identifier || current_token[:type] == :keyword)
+          property_token = advance
+          target = {
+            type: :property_access,
+            object: target,
+            property: property_token[:value],
+            line: dot_token[:line],
+            column: dot_token[:column]
+          }
+        else
+          add_error("Expected property name after '.' in global variable")
+        end
+      end
+
+      # Indexed access (e.g., g:foo[bar])
+      while current_token && current_token[:type] == :bracket_open
+        bracket_token = advance
+        index_expr = parse_expression
+        expect(:bracket_close)
+        target = {
+          type: :indexed_access,
+          object: target,
+          index: index_expr,
+          line: bracket_token[:line],
+          column: bracket_token[:column]
+        }
+      end
+
+      # Assignment operator (= or compound)
+      operator = nil
+      if current_token && (
+          (current_token[:type] == :operator && current_token[:value] == '=') ||
+          current_token[:type] == :compound_operator)
+        operator = current_token[:value]
+        advance
+      else
+        add_error("Expected assignment operator after global variable")
+      end
+
+      # Value expression
+      value = parse_expression
+
+      {
+        type: :global_variable_assignment,
+        target: target,
+        operator: operator,
+        value: value,
+        line: line,
+        column: column
+      }
     end
 
     def parse_range_command
@@ -1798,6 +1873,18 @@ module Vinter
               }
             end
           end
+        end
+      when :vimfuncs
+        advance
+        if current_token[:type] == :paren_open
+          expr = parse_function_call(token[:value], line, column)
+        else
+          expr = {
+            type: :vimfuncs,
+            name: token[:value],
+            line: line,
+            column: column
+          }
         end
       when :namespace_prefix
         advance

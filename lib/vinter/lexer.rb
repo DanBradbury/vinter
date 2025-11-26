@@ -4,6 +4,7 @@ module Vinter
       # Vim9 specific keywords
       keyword: /\b(if|else|elseif|endif|while|endwhile|for|endfor|def|enddef|function|endfunction|endfunc|return|const|var|final|import|export|class|extends|static|enum|type|vim9script|scriptencoding|abort|autocmd|echom|echoerr|echohl|echomsg|let|unlet|execute|exec|continue|break|try|catch|finally|endtry|throw|runtime|silent|delete|command|call|set|setlocal|syntax|highlight|sleep|source|nnoremap|nmap|inoremap|imap|vnoremap|vmap|xnoremap|xmap|cnoremap|cmap|noremap|map|var)\b/,
       encodings: /\b(latin1|iso|koi8|macroman|cp437|cp737|cp775|cp850|cp852|cp855|cp857|cp860|cp861|cp862|cp863|cp865|cp866|cp869|cp874|cp1250|cp1251|cp1253|cp1254|cp1255|cp1256|cp1257|cp1258|cp932|euc\-jp|sjis|cp949|euc\-kr|cp936|euc\-cn|cp950|big5|euc\-tw|utf\-8|ucs\-2|ucs\-21e|utf\-16|utf\-16le|ucs\-4|ucs\-4le|ansi|japan|korea|prc|chinese|taiwan|utf8|unicode|ucs2be|ucs\-2be|ucs\-4be|utf\-32|utf\-32le|default)\b/,
+      vimfuncs: /\b(win_execute|win_findbuf|win_getid|win_gettype|win_gotoid|win_id2tabwin|win_id2win|win_move_separator|win_move_statusline|win_screenpos|win_splitmove)\b/,
       # Identifiers can include # and special characters
       identifier: /\b[a-zA-Z_][a-zA-Z0-9_#]*\b/,
       # Single-character operators
