@@ -354,6 +354,8 @@ module Vinter
         when 'vim9script'
           token = advance # Skip 'vim9script'
           { type: :vim9script_declaration, line: token[:line], column: token[:column] }
+        when 'scriptencoding'
+          parse_scriptencoding
         when 'autocmd'
           parse_autocmd_statement
         when 'execute', 'exec'
@@ -1832,6 +1834,12 @@ module Vinter
       when :line_continuation
         advance
         expr = parse_expression
+      when :interpolated_string
+        advance
+        expr = {
+          type: :interpolated_string,
+          value: token[:value],
+        }
       else
         @errors << {
           message: "Unexpected token in expression: #{token[:type]}",
@@ -1850,7 +1858,7 @@ module Vinter
           # Look ahead to determine if this is property access or concatenation
           next_token = peek_token
           is_property_access = next_token && (next_token[:type] == :identifier || next_token[:type] == :keyword)
-          
+
           # Check if this is a property access (only when right side is identifier/keyword)
           if is_property_access && (expr[:type] == :identifier || expr[:type] == :global_variable ||
             expr[:type] == :script_local || expr[:type] == :namespace_prefix ||
@@ -2487,7 +2495,7 @@ module Vinter
                                  current_token[:type] == :whitespace)
             advance
           end
-          
+
           # After skipping continuations, we should find the closing brace
           if current_token && current_token[:type] == :brace_close
             # This is fine - last entry without trailing comma
@@ -2819,6 +2827,13 @@ module Vinter
         column: column
       }
     end
+
+    def parse_scriptencoding
+      token = advance
+      advance
+      { type: :scriptencoding, encoding: current_token[:value] }
+    end
+
     def parse_export_statement
       token = advance # Skip 'export'
       line = token[:line]
@@ -3221,7 +3236,7 @@ module Vinter
 
       # Parse the try body until catch/finally/endtry
       body = parse_body_until('catch', 'finally', 'endtry')
-      
+
       catch_clauses = []
       finally_clause = nil
 
@@ -3553,14 +3568,14 @@ module Vinter
     def parse_brace_sequence_value
       # Handle special brace sequences like {{{,}}} for foldmarker
       value_parts = []
-      
-      while current_token && (current_token[:type] == :brace_open || 
-                             current_token[:type] == :brace_close || 
+
+      while current_token && (current_token[:type] == :brace_open ||
+                             current_token[:type] == :brace_close ||
                              current_token[:type] == :comma)
         value_parts << current_token[:value]
         advance
       end
-      
+
       return {
         type: :brace_sequence,
         value: value_parts.join(''),
@@ -3572,7 +3587,7 @@ module Vinter
     def parse_comma_separated_value
       # Handle comma-separated option values like menu,menuone,noinsert,noselect
       values = []
-      
+
       # Parse first value
       if current_token && current_token[:type] == :identifier
         values << current_token[:value]
@@ -3580,7 +3595,7 @@ module Vinter
       else
         return parse_expression  # Fall back to regular expression parsing
       end
-      
+
       # Parse additional comma-separated values
       while current_token && current_token[:type] == :comma
         advance # Skip comma
@@ -3591,7 +3606,7 @@ module Vinter
           break
         end
       end
-      
+
       return {
         type: :comma_separated_value,
         values: values,
@@ -3643,7 +3658,7 @@ module Vinter
       value = nil
       if current_token && current_token[:type] == :operator && current_token[:value] == '='
         advance # Skip '='
-        
+
         # Special handling for foldmarker and similar options that use brace notation
         if option_name == 'foldmarker' && current_token && current_token[:type] == :brace_open
           # Parse as special brace sequence value (e.g., {{{,}}})
@@ -3770,8 +3785,8 @@ module Vinter
             advance
 
             # Parse attribute value (can be identifier, number, or hex color)
-            if current_token && (current_token[:type] == :identifier || 
-                                current_token[:type] == :number || 
+            if current_token && (current_token[:type] == :identifier ||
+                                current_token[:type] == :number ||
                                 current_token[:type] == :hex_color)
               attributes[attr_name] = current_token[:value]
               advance

@@ -2,7 +2,8 @@ module Vinter
   class Lexer
     TOKEN_TYPES = {
       # Vim9 specific keywords
-      keyword: /\b(if|else|elseif|endif|while|endwhile|for|endfor|def|enddef|function|endfunction|endfunc|return|const|var|final|import|export|class|extends|static|enum|type|vim9script|abort|autocmd|echom|echoerr|echohl|echomsg|let|unlet|execute|exec|continue|break|try|catch|finally|endtry|throw|runtime|silent|delete|command|call|set|setlocal|syntax|highlight|sleep|source|nnoremap|nmap|inoremap|imap|vnoremap|vmap|xnoremap|xmap|cnoremap|cmap|noremap|map)\b/,
+      keyword: /\b(if|else|elseif|endif|while|endwhile|for|endfor|def|enddef|function|endfunction|endfunc|return|const|var|final|import|export|class|extends|static|enum|type|vim9script|scriptencoding|abort|autocmd|echom|echoerr|echohl|echomsg|let|unlet|execute|exec|continue|break|try|catch|finally|endtry|throw|runtime|silent|delete|command|call|set|setlocal|syntax|highlight|sleep|source|nnoremap|nmap|inoremap|imap|vnoremap|vmap|xnoremap|xmap|cnoremap|cmap|noremap|map|var)\b/,
+      encodings: /\b(latin1|iso|koi8|macroman|cp437|cp737|cp775|cp850|cp852|cp855|cp857|cp860|cp861|cp862|cp863|cp865|cp866|cp869|cp874|cp1250|cp1251|cp1253|cp1254|cp1255|cp1256|cp1257|cp1258|cp932|euc\-jp|sjis|cp949|euc\-kr|cp936|euc\-cn|cp950|big5|euc\-tw|utf\-8|ucs\-2|ucs\-21e|utf\-16|utf\-16le|ucs\-4|ucs\-4le|ansi|japan|korea|prc|chinese|taiwan|utf8|unicode|ucs2be|ucs\-2be|ucs\-4be|utf\-32|utf\-32le|default)\b/,
       # Identifiers can include # and special characters
       identifier: /\b[a-zA-Z_][a-zA-Z0-9_#]*\b/,
       # Single-character operators
@@ -26,7 +27,7 @@ module Vinter
       comma: /,/,
       backslash: /\\/,
       question_mark: /\?/,
-      command_separator: /\|/,
+      command_separator: /\|/
     }
 
     CONTINUATION_OPERATORS = %w(. .. + - * / = == ==# ==? != > < >= <= && || ? : -> =>)
@@ -41,21 +42,21 @@ module Vinter
     def should_parse_as_regex
       # Look at recent tokens to determine if we're in a regex context
       recent_tokens = @tokens.last(3)
-      
+
       # Check for contexts where regex is expected
-      return true if recent_tokens.any? { |t| 
-        t && t[:type] == :keyword && ['syntax'].include?(t[:value]) 
+      return true if recent_tokens.any? { |t|
+        t && t[:type] == :keyword && ['syntax'].include?(t[:value])
       }
-      
+
       return true if recent_tokens.any? { |t|
         t && t[:type] == :identifier && ['match', 'region', 'keyword'].include?(t[:value])
       }
-      
+
       # Check for comparison operators that often use regex
       return true if recent_tokens.any? { |t|
         t && t[:type] == :operator && ['=~', '!~', '=~#', '!~#', '=~?', '!~?'].include?(t[:value])
       }
-      
+
       false
     end
 
@@ -85,7 +86,7 @@ module Vinter
           end
           line_start = temp_pos < 0 || @input[temp_pos] == "\n"
         end
-        
+
         # If we're at the start of a line and it begins with a quote
         if line_start && chunk.start_with?('"')
           # Find the end of the line
@@ -103,6 +104,47 @@ module Vinter
           @column += comment_text.length
           next
         end
+
+        # --- Interpolated String Handling ---
+        if chunk.start_with?("$'")
+          i = 2
+          string_value = "$'"
+          brace_depth = 0
+          escaped = false
+
+          while i < chunk.length
+            char = chunk[i]
+            string_value += char
+
+            if char == '\\' && !escaped
+              escaped = true
+            elsif char == "'" && !escaped && brace_depth == 0
+              # End of interpolated string
+              i += 1
+              break
+            elsif char == '{' && !escaped
+              brace_depth += 1
+            elsif char == '}' && !escaped && brace_depth > 0
+              brace_depth -= 1
+            elsif escaped
+              escaped = false
+            end
+
+            i += 1
+          end
+
+          @tokens << {
+            type: :interpolated_string,
+            value: string_value,
+            line: @line_num,
+            column: @column
+          }
+          @column += string_value.length
+          @position += string_value.length
+          @line_num += string_value.count("\n")
+          next
+        end
+
         # Handle string literals manually
         if chunk.start_with?("'") || chunk.start_with?('"')
           quote = chunk[0]
@@ -118,7 +160,7 @@ module Vinter
             if char == '\\' && !escaped
               escaped = true
             elsif (char == "\n" or char == quote) && !escaped
-              # Found closing quote
+              i += 1
               break
             elsif escaped
               escaped = false
@@ -186,7 +228,7 @@ module Vinter
         end
 
         # Check for keywords first, before other token types
-        if match = chunk.match(/\A\b(if|else|elseif|endif|while|endwhile|for|endfor|def|enddef|function|endfunction|endfunc|return|const|var|final|import|export|class|extends|static|enum|type|vim9script|abort|autocmd|echoerr|echohl|echomsg|let|unlet|execute|setlocal|syntax|highlight|sleep|source)\b/)
+        if match = chunk.match(/\A\b(if|else|elseif|endif|while|endwhile|for|endfor|def|enddef|function|endfunction|endfunc|return|const|var|final|import|export|class|extends|static|enum|type|vim9script|abort|autocmd|echoerr|echohl|echomsg|let|unlet|var|execute|setlocal|syntax|highlight|sleep|source)\b/)
           @tokens << {
             type: :keyword,
             value: match[0],
@@ -210,7 +252,7 @@ module Vinter
           @position += match[0].length
           next
         end
-        
+
         # Handle Vim option variables with & prefix
         if match = chunk.match(/\A&[a-zA-Z_][a-zA-Z0-9_]*/)
           @tokens << {
@@ -385,21 +427,21 @@ module Vinter
         if chunk.start_with?('/') && should_parse_as_regex
           i = 1
           regex_value = '/'
-          
+
           # Keep going until we find the closing slash
           while i < chunk.length
             char = chunk[i]
             regex_value += char
-            
+
             if char == '/' && (i == 1 || chunk[i-1] != '\\')
               # Found closing slash
               i += 1
               break
             end
-            
+
             i += 1
           end
-          
+
           # Add the regex token if we found a closing slash
           if regex_value.end_with?('/')
             @tokens << {
