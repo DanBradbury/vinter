@@ -297,6 +297,8 @@ enddef
 
 ### Step 1: Lexer Output
 
+The following shows a simplified representation of the key tokens. The actual tokenization also includes whitespace tracking for line/column positions:
+
 ```mermaid
 flowchart LR
     subgraph Tokens
@@ -465,7 +467,7 @@ The Vinter parsing pipeline follows a classic compiler frontend architecture:
 
 2. **Syntactic Analysis (Parser)**: Builds a hierarchical AST from tokens using recursive descent parsing. Handles both legacy VimScript and Vim9 script syntax.
 
-3. **Semantic Analysis (Linter)**: Traverses the AST to check for style violations and potential issues, using configurable rules.
+3. **Static Analysis (Linter)**: Traverses the AST to check for style violations and potential issues, using configurable rules.
 
 This architecture allows for:
 - **Extensibility**: New rules can be added without modifying the parser
