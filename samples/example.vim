@@ -3,6 +3,13 @@ scriptencoding utf-8
 
 var file_list_cache: list<string> = []
 g:github_actions_last_window = win_getid()
+b:added_syntaxes = []
+
+var st: dict<any> = {
+  'content': 'string'
+}
+st.content ..= 'nah'
+echo st.content
 
 export def OpenWorkflowFile(): void
   var line: string = getline('.')

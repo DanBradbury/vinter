@@ -426,9 +426,14 @@ module Vinter
         parse_range_command
       elsif current_token[:type] == :global_variable
         parse_global_variable
+      elsif current_token[:type] == :buffer_local
+        parse_buffer_var
       elsif current_token[:type] == :vimfuncs
         advance
         parse_function_call(current_token[:value], current_token[:line], current_token[:column])
+      elsif current_token[:type] == :compound_operator
+        advance
+        parse_expression
       else
         @warnings << {
           message: "Unexpected token type: #{current_token[:type]}",
@@ -439,6 +444,78 @@ module Vinter
         advance
         nil
       end
+    end
+
+    def parse_buffer_var
+      token = current_token
+      line = token[:line]
+      column = token[:column]
+      name = token[:value]
+      advance
+
+      # Handle property access (e.g., b:foo.bar)
+      target = {
+        type: :buffer_variable,
+        name: name,
+        line: line,
+        column: column
+      }
+
+      # Property access (dot notation)
+      # shared with global (TODO)
+      # would almost just take an overly simple check to the = operator and call everything after b: name
+      if current_token && current_token[:type] == :operator && current_token[:value] == '.'
+        dot_token = advance
+        if current_token && (current_token[:type] == :identifier || current_token[:type] == :keyword)
+          property_token = advance
+          target = {
+            type: :property_access,
+            object: target,
+            property: property_token[:value],
+            line: dot_token[:line],
+            column: dot_token[:column]
+          }
+        else
+          add_error("Expected property name after '.' in variable")
+        end
+      end
+
+      # Indexed access (e.g., b:foo[bar])
+      while current_token && current_token[:type] == :bracket_open
+        bracket_token = advance
+        index_expr = parse_expression
+        expect(:bracket_close)
+        target = {
+          type: :indexed_access,
+          object: target,
+          index: index_expr,
+          line: bracket_token[:line],
+          column: bracket_token[:column]
+        }
+      end
+
+      # Assignment operator (= or compound)
+      operator = nil
+      if current_token && (
+          (current_token[:type] == :operator && current_token[:value] == '=') ||
+          current_token[:type] == :compound_operator)
+        operator = current_token[:value]
+        advance
+      else
+        add_error("Expected assignment operator after global variable")
+      end
+
+      # Value expression
+      value = parse_expression
+
+      {
+        type: :buffer_variable_assignment,
+        target: target,
+        operator: operator,
+        value: value,
+        line: line,
+        column: column
+      }
     end
 
     def parse_global_variable
@@ -1327,7 +1404,7 @@ module Vinter
 
       # Parse initializer if present
       initializer = nil
-      if current_token && current_token[:type] == :operator && current_token[:value] == '='
+      if current_token && (current_token[:type] == :operator && current_token[:value] == '=')
         advance # Skip '='
         initializer = parse_expression
       end
