@@ -244,7 +244,6 @@ module Vinter
       if !current_token
         return nil
       end
-      start_token = current_token
 
       # Handle pipe as command separator
       if current_token[:type] == :operator && current_token[:value] == '|'
@@ -378,7 +377,7 @@ module Vinter
           parse_set_command
         when 'syntax'
           parse_syntax_command
-        when 'highlight'
+        when 'highlight', 'hi'
           parse_highlight_command
         when 'sleep'
           parse_sleep_command
@@ -431,9 +430,15 @@ module Vinter
       elsif current_token[:type] == :vimfuncs
         advance
         parse_function_call(current_token[:value], current_token[:line], current_token[:column])
+      elsif current_token[:type] == :builtin_funcs
+        parse_builtin_function_call
       elsif current_token[:type] == :compound_operator
         advance
         parse_expression
+      elsif current_token[:type] == :string
+        parse_string
+      elsif current_token[:type] == :comma
+        advance
       else
         @warnings << {
           message: "Unexpected token type: #{current_token[:type]}",
@@ -981,9 +986,11 @@ module Vinter
       event = nil
       if current_token && current_token[:type] == :identifier
         event = advance[:value]
+      elsif current_token[:type] == :operator && current_token[:value] == "!"
+        advance
       else
         @errors << {
-          message: "Expected event name after 'autocmd'",
+          message: "Expected event name after 'autocmd' | #{current_token[:type]}",
           position: @position,
           line: current_token ? current_token[:line] : 0,
           column: current_token ? current_token[:column] : 0
@@ -1697,7 +1704,7 @@ module Vinter
         # Special handling for map-related keywords when they appear in expressions
         if ['map', 'nmap', 'imap', 'vmap', 'xmap', 'noremap', 'nnoremap', 'inoremap', 'vnoremap', 'xnoremap', 'cnoremap', 'cmap'].include?(token[:value])
           if peek_token[:type] == :paren_open
-            parse_builtin_function_call(token[:value], line, column)
+            parse_builtin_function_call
           else
             # Treat map commands as identifiers when inside expressions
             advance
@@ -1710,7 +1717,7 @@ module Vinter
           end
         elsif token[:value] == 'type' && current_token && (current_token[:type] == :paren_open || peek_token && peek_token[:type] == :paren_open)
           # This is the type() function call
-          return parse_builtin_function_call(token[:value], line, column)
+          return parse_builtin_function_call
         elsif token[:value] == 'function'
           # Check if this is a function() call or just 'function' as property name
           if peek_token && peek_token[:type] == :paren_open
@@ -1923,7 +1930,7 @@ module Vinter
       when :identifier
         # Special handling for Vim built-in functions
         if ['has', 'exists', 'empty', 'get', 'type', 'map', 'copy'].include?(token[:value])
-          expr = parse_builtin_function_call(token[:value], line, column)
+          expr = parse_builtin_function_call
         else
           advance
 
@@ -2186,76 +2193,19 @@ module Vinter
       return expr
     end
 
-    def parse_builtin_function_call(name, line, column)
-      # Skip the function name (already consumed)
-      advance if current_token[:value] == name
+    def parse_builtin_function_call
+      token = advance # Consume the `builtin_funcs` token
+      line = token[:line]
+      column = token[:column]
+      name = token[:value]
 
-      # Check if there's an opening parenthesis
-      if current_token && current_token[:type] == :paren_open
-        advance # Skip '('
-
-        # Parse arguments
-        args = []
-
-        # Functions that take string expressions as code
-        special_functions = ['map', 'reduce', 'sort', 'call', 'eval', 'execute', 'exec']
-        is_special_function = special_functions.include?(name)
-
-        # Parse until closing parenthesis
-        while @position < @tokens.length && current_token && current_token[:type] != :paren_close
-          # Skip whitespace or comments
-          if current_token[:type] == :whitespace || current_token[:type] == :comment
-            advance
-            next
-          end
-
-          # Special handling for string arguments that contain code
-          if is_special_function &&
-             current_token && current_token[:type] == :string
-            string_token = parse_expression
-            args << {
-              type: :literal,
-              value: string_token[:value],
-              token_type: :string,
-              line: string_token[:line],
-              column: string_token[:column]
-            }
-          else
-            arg = parse_expression
-            args << arg if arg
-          end
-
-          if current_token && current_token[:type] == :comma
-            advance
-          elsif current_token && current_token[:type] != :paren_close
-            @errors << {
-              message: "Expected comma or closing parenthesis in #{name} function",
-              position: @position,
-              line: current_token[:line],
-              column: current_token[:column]
-            }
-            break
-          end
-        end
-
-        # Check for closing parenthesis
-        if current_token && current_token[:type] == :paren_close
-          advance # Skip ')'
-        else
-          @errors << {
-            message: "Expected ')' to close #{name} function call",
-            position: @position,
-            line: current_token ? current_token[:line] : 0,
-            column: current_token ? current_token[:column] : 0
-          }
-        end
-      else
-        # Handle legacy Vim script where parentheses might be omitted
-        # Just parse one expression as the argument
-        args = [parse_expression]
+      # Collect arguments (if any) until the end of the line
+      args = []
+      while current_token && current_token[:type] != :comment && current_token[:value] != "\n"
+        args << current_token[:value]
+        advance
       end
 
-      # Return function call node
       {
         type: :builtin_function_call,
         name: name,
@@ -3925,6 +3875,7 @@ module Vinter
     end
 
     def parse_highlight_command
+      binding.pry
       token = advance # Skip 'highlight'
       line = token[:line]
       column = token[:column]
