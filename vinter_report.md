@@ -1,20 +1,23 @@
 # Vinter Analysis Report
 
 ## Summary
-Total Errors: 1590
-Total Warnings: 1620
+Total Errors: 1596
+Total Warnings: 1614
 Repos with No Issues: 15
 
 ## Cumulative Report
 
-**2025-11-30T06:41:34Z**: Total Errors: 1852, Total Warnings: 2641, Repos with No Issues: 11**2025-11-30T07:00:27Z**: Total Errors: 1716, Total Warnings: 1593, Repos with No Issues: 13**2025-11-30T07:12:01Z**: Total Errors: 1590, Total Warnings: 1620, Repos with No Issues: 15
+- **2025-11-30T06:41:34Z**: Total Errors: 1852, Total Warnings: 2641, Repos with No Issues: 11
+
+- **2025-11-30T07:38:17Z**: Total Errors: 1596, Total Warnings: 1614, Repos with No Issues: 15
+
 
 
 ## Detailed Report
 
 | Repository URL | Errors | Warnings |
 |----------------|--------|----------|
-| https://github.com/kratuvid/vim9-gruvbox | 60 | 0 |
+| https://github.com/kratuvid/vim9-gruvbox | 65 | 0 |
 | https://github.com/zhixiao-zhang/vim-light-pink | 0 | 0 |
 | https://github.com/ShayHill/vim9-scratchterm | 0 | 0 |
 | https://github.com/habamax/vim-shout | 0 | 0 |
@@ -24,13 +27,13 @@ Repos with No Issues: 15
 | https://github.com/mityu/vim-wispath | 0 | 2 |
 | https://github.com/Coacher/vim9-buckler | 2 | 0 |
 | https://github.com/Coacher/vim9-cutlass | 0 | 0 |
-| https://github.com/Eliot00/auto-pairs | 2 | 1 |
+| https://github.com/Eliot00/auto-pairs | 1 | 0 |
 | https://github.com/ubaldot/vim-highlight-yanked | 0 | 0 |
 | https://github.com/ubaldot/vim-markdown-extras | 26 | 5 |
 | https://github.com/ubaldot/vim-op-surround | 4 | 6 |
 | https://github.com/ubaldot/vim-writegood | 2 | 0 |
 | https://github.com/habamax/vim-dir | 28 | 10 |
-| https://github.com/nda-cunh/SupraTree | 17 | 4 |
+| https://github.com/nda-cunh/SupraTree | 19 | 8 |
 | https://github.com/saccarosium/vim-netrw-salad | 0 | 0 |
 | https://github.com/ubaldot/vim-open-recent | 0 | 1 |
 | https://github.com/ycm/poplar.vim | 41 | 44 |
@@ -61,7 +64,7 @@ Repos with No Issues: 15
 | https://github.com/lifepillar/vim-devel | 27 | 71 |
 | https://github.com/pit-ray/vim-autograd | 43 | 60 |
 | https://github.com/habamax/vim-ii | 0 | 0 |
-| https://github.com/jessepav/vim-boxdraw | 31 | 140 |
+| https://github.com/jessepav/vim-boxdraw | 30 | 140 |
 | https://github.com/lacygoill/vim9asm | 7 | 18 |
 | https://github.com/mao-yining/competitest.vim | 55 | 22 |
 | https://github.com/nda-cunh/SupraIcons | 4 | 2 |
@@ -73,12 +76,12 @@ Repos with No Issues: 15
 | https://github.com/wolandark/vim-ez-emoji | 0 | 0 |
 | https://github.com/girishji/easyjump.vim | 7 | 22 |
 | https://github.com/girishji/fFtT.vim | 5 | 13 |
-| https://github.com/monkoose/vim9-stargate | 15 | 15 |
+| https://github.com/monkoose/vim9-stargate | 15 | 6 |
 | https://github.com/bennyyip/plugpac.vim | 2 | 4 |
 | https://github.com/bfrg/vim-qf-diagnostics | 16 | 0 |
 | https://github.com/bfrg/vim-qf-history | 5 | 0 |
 | https://github.com/bfrg/vim-qf-preview | 7 | 5 |
-| https://github.com/Bakudankun/qline.vim | 30 | 4 |
+| https://github.com/Bakudankun/qline.vim | 31 | 4 |
 | https://github.com/ShayHill/vim9-limelight | 33 | 60 |
 | https://github.com/kennypete/vim-tene | 26 | 47 |
 | https://github.com/kennypete/vim-popped | 8 | 3 |

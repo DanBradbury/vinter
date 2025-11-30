@@ -69,11 +69,11 @@ if response.code == 200
   end
 
   # Extract existing cumulative list
-  cumulative_list = cumulative_report[/## Cumulative Report\n\n(.*?)(?=\n#|$)/m, 1] || ""
+  cumulative_list = cumulative_report[/## Cumulative Report\n\n((?:- .*\n?)+)/, 1] || ""
 
   # Add new entry to the cumulative list
   timestamp = Time.now.utc.iso8601
-  new_entry = "**#{timestamp}**: Total Errors: #{total_errors}, Total Warnings: #{total_warnings}, Repos with No Issues: #{repos_with_no_issues}\n"
+  new_entry = "- **#{timestamp}**: Total Errors: #{total_errors}, Total Warnings: #{total_warnings}, Repos with No Issues: #{repos_with_no_issues}\n\n"
   cumulative_list += new_entry
 
   # Generate the Markdown report
