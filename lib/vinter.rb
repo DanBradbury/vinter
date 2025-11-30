@@ -5,5 +5,5 @@ require "vinter/cli"
 require "vinter/ast_printer"
 
 module Vinter
-  VERSION = "0.5.0"
+  VERSION = "0.6.0"
 end
