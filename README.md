@@ -81,6 +81,15 @@ linter.register_rule(custom_rule)
 issues = linter.lint(content)
 ```
 
+## Architecture
+
+For a detailed explanation of how Vinter parses VimScript content and transforms it into an AST, see the [Architecture Documentation](docs/ARCHITECTURE.md). This includes:
+
+- Mermaid diagrams showing the parsing flow
+- Token and AST node structures
+- Class relationships
+- Step-by-step parsing examples
+
 ## Vim9 Script Resources
 
 - [Vim9 Script Documentation](https://vimhelp.org/vim9.txt.html)
