@@ -439,6 +439,8 @@ module Vinter
         parse_string
       elsif current_token[:type] == :comma
         advance
+      elsif current_token[:type] == :colon
+        parse_command_line_call
       else
         @warnings << {
           message: "Unexpected token type: #{current_token[:type]}",
@@ -449,6 +451,40 @@ module Vinter
         advance
         nil
       end
+    end
+
+    def parse_command_line_call
+      token = advance # Skip the ':'
+      line = token[:line]
+      column = token[:column]
+
+      # Extract the command or range
+      command = token[:value][1..] # Remove the leading ':'
+
+      # Check if the command is a range (e.g., `:2`, `:$`)
+      if command.match?(/^\d+$/) || command == '$'
+        return {
+          type: :range_command,
+          range: command,
+          line: line,
+          column: column
+        }
+      end
+
+      # Otherwise, it's a regular command (e.g., `:exe`)
+      args = []
+      while current_token && current_token[:type] != :newline
+        args << current_token[:value]
+        advance
+      end
+
+      {
+        type: :command_line_call,
+        command: command,
+        arguments: args,
+        line: line,
+        column: column
+      }
     end
 
     def parse_buffer_var
@@ -1258,7 +1294,7 @@ module Vinter
 
       # Parse optional return type
       return_type = nil
-      if current_token && current_token[:type] == :colon
+      if current_token && current_token[:type] == :colon && current_token[:line] == line
         advance # Skip ':'
         return_type = parse_type
       end
@@ -2006,7 +2042,8 @@ module Vinter
         advance
         expr = parse_expression
       when :interpolated_string
-        advance
+        token = advance
+        value = token[:value]
         expr = {
           type: :interpolated_string,
           value: token[:value],
