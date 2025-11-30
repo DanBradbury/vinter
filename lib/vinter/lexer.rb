@@ -569,10 +569,21 @@ module Vinter
           @column += 1
           @position += 1
 
-          # If followed by a newline, advance to next line
+          # If followed by a newline, advance to the next line
           if @position < @input.length && @input[@position] == "\n"
             @line_num += 1
             @column = 1
+            @position += 1
+          end
+
+          # Skip whitespace after the continuation
+          while @position < @input.length && @input[@position] =~ /\s/
+            if @input[@position] == "\n"
+              @line_num += 1
+              @column = 1
+            else
+              @column += 1
+            end
             @position += 1
           end
 

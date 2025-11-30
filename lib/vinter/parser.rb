@@ -1,3 +1,4 @@
+require 'pry'
 module Vinter
   class Parser
     def initialize(tokens, source_text = nil)
@@ -1352,12 +1353,6 @@ module Vinter
           break
         end
 
-        # Get parameter name
-        if !current_token || current_token[:type] != :identifier
-          add_error("Expected parameter name")
-          break
-        end
-
         param_name = advance
 
         # Check for type annotation
@@ -1839,6 +1834,8 @@ module Vinter
             line: line,
             column: column
           }
+        elsif token[:value] == 'command'
+          advance
         else
           @errors << {
             message: "Unexpected keyword in expression: #{token[:value]}",
@@ -2104,6 +2101,7 @@ module Vinter
         # Check for method call with arrow ->
         elsif current_token[:type] == :operator && current_token[:value] == '->'
           arrow_token = advance # Skip '->'
+          advance if current_token[:type] == :line_continuation
 
           # Next token should be an identifier (method name)
           if !current_token || current_token[:type] != :identifier
@@ -2167,6 +2165,12 @@ module Vinter
               }
             else
               end_index = parse_expression
+            end
+          # handles array assignment [a,b] = split(thing)
+          elsif current_token[:type] == :comma
+            while current_token[:type] == :comma
+              advance
+              parse_expression
             end
           end
 
@@ -2801,42 +2805,30 @@ module Vinter
 
       args = []
 
-      # Special handling for Vim functions that take code strings as arguments
-      special_functions = ['map', 'reduce', 'sort', 'call', 'eval', 'execute', 'exec']
-      is_special_function = special_functions.include?(name)
-
       # Parse arguments until we find a closing parenthesis
       while @position < @tokens.length && current_token && current_token[:type] != :paren_close
-        # Skip comments inside parameter lists
-        if current_token && current_token[:type] == :comment
+        # Skip line continuations
+        if current_token[:type] == :line_continuation
           advance
           next
         end
-        if is_special_function && current_token && current_token[:type] == :string
-          # For functions like map(), filter(), directly add the string as an argument
-          string_token = parse_string
-          args << {
-            type: :literal,
-            value: string_token[:value],
-            token_type: :string,
-            line: string_token[:line],
-            column: string_token[:column]
-          }
-        else
-          # Parse the argument
-          arg = parse_expression
-          args << arg if arg
-        end
 
-        # Break if we hit the closing paren
+        # Parse the argument
+        arg = parse_expression
+        args << arg if arg
+
+        # Break if we hit the closing parenthesis
         if current_token && current_token[:type] == :paren_close
           break
         end
+
         # If we have a comma, advance past it and continue
         if current_token && current_token[:type] == :comma
           advance
+        elsif current_token[:type] == :line_continuation
+          advance
         # If we don't have a comma and we're not at the end, it's an error
-        elsif current_token && current_token[:type] != :paren_close && current_token[:type] != :comment
+        elsif current_token && current_token[:type] != :paren_close
           @errors << {
             message: "Expected comma or closing parenthesis after argument",
             position: @position,
@@ -3087,7 +3079,7 @@ module Vinter
           advance # Skip the '='
 
           # Get the value (number or identifier)
-          if current_token && (current_token[:type] == :number || current_token[:type] == :identifier)
+          if current_token && (current_token[:type] == :number || current_token[:type] == :identifier) || current_token[:type] == :operator
             attribute += "=#{current_token[:value]}"
             attributes << attribute
             advance
@@ -3097,6 +3089,7 @@ module Vinter
 
       # Parse the command name
       command_name = nil
+      advance if current_token[:type] == :line_continuation
       if current_token && current_token[:type] == :identifier
         command_name = current_token[:value]
         advance
