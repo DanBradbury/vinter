@@ -6,21 +6,45 @@ module Vinter
 
     def run(args)
       if args.empty?
-        puts "Usage: vinter [file.vim|directory]"
+        puts "Usage: vinter [file.vim|directory] [--exclude=dir1,dir2]"
         return 1
       end
 
-      target_path = args[0]
+      # Parse args: first non-option argument is the target path.
+      exclude_value = nil
+      target_path = nil
+
+      args.each_with_index do |a, i|
+        if a.start_with?("--exclude=")
+          exclude_value = a.split("=", 2)[1]
+        elsif a == "--exclude"
+          exclude_value = args[i + 1]
+        elsif !a.start_with?('-') && target_path.nil?
+          target_path = a
+        end
+      end
+
+      if target_path.nil?
+        puts "Usage: vinter [file.vim|directory] [--exclude=dir1,dir2]"
+        return 1
+      end
 
       unless File.exist?(target_path)
         puts "Error: File or directory not found: #{target_path}"
         return 1
       end
 
+      excludes = Array(exclude_value).flat_map { |v| v.to_s.split(',') }.map(&:strip).reject(&:empty?)
+
       vim_files = if File.directory?(target_path)
-                    find_vim_files(target_path)
+                    find_vim_files(target_path, excludes)
                   else
-                    [target_path]
+                    # Check if single file is inside an excluded directory
+                    if excluded_file?(target_path, excludes, File.dirname(target_path))
+                      []
+                    else
+                      [target_path]
+                    end
                   end
 
       if vim_files.empty?
@@ -68,8 +92,32 @@ module Vinter
 
     private
 
-    def find_vim_files(directory)
-      Dir.glob(File.join(directory, "**", "*.vim")).sort
+    def find_vim_files(directory, excludes = [])
+      files = Dir.glob(File.join(directory, "**", "*.vim")).sort
+
+      return files if excludes.empty?
+
+      # Normalize exclude directories to absolute paths (relative to the target directory)
+      normalized = excludes.map { |e| File.expand_path(e, directory) }
+
+      files.reject do |f|
+        normalized.any? do |ex|
+          ex_with_slash = ex.end_with?(File::SEPARATOR) ? ex : ex + File::SEPARATOR
+          f.start_with?(ex_with_slash) || File.expand_path(f).start_with?(ex_with_slash)
+        end
+      end
+    end
+
+    def excluded_file?(file_path, excludes, base_dir)
+      return false if excludes.empty?
+
+      normalized = excludes.map { |e| File.expand_path(e, base_dir) }
+      file_abs = File.expand_path(file_path)
+
+      normalized.any? do |ex|
+        ex_with_slash = ex.end_with?(File::SEPARATOR) ? ex : ex + File::SEPARATOR
+        file_abs.start_with?(ex_with_slash)
+      end
     end
   end
 end
