@@ -3912,7 +3912,6 @@ module Vinter
     end
 
     def parse_highlight_command
-      binding.pry
       token = advance # Skip 'highlight'
       line = token[:line]
       column = token[:column]

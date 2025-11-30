@@ -191,40 +191,40 @@ module Vinter
         if chunk.start_with?("'") || chunk.start_with?('"')
           quote = chunk[0]
           i = 1
-          escaped = false
           string_value = quote
 
           # Keep going until we find an unescaped closing quote
           while i < chunk.length
             char = chunk[i]
+            next_char = chunk[i + 1] if i + 1 < chunk.length
+
             string_value += char
 
-            if char == '\\' && !escaped
-              escaped = true
-            elsif (char == "\n" or char == quote) && !escaped
+            if char == quote && next_char == quote
+              # Handle escaped single quote ('') or double quote ("")
+              string_value += next_char
+              i += 1
+            elsif char == quote
+              # End of string
               i += 1
               break
-            elsif escaped
-              escaped = false
             end
 
             i += 1
           end
 
           # Add the string token if we found a closing quote
-          if i < chunk.length || (i == chunk.length && chunk[-1] == quote)
-            @tokens << {
-              type: :string,
-              value: string_value,
-              line: @line_num,
-              column: @column
-            }
+          @tokens << {
+            type: :string,
+            value: string_value,
+            line: @line_num,
+            column: @column
+          }
 
-            @column += string_value.length
-            @position += string_value.length
-            @line_num += 1 if string_value.include?("\n")
-            next
-          end
+          @column += string_value.length
+          @position += string_value.length
+          @line_num += string_value.count("\n")
+          next
         end
 
         # Add special handling for command options in the tokenize method

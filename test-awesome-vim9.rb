@@ -1,6 +1,7 @@
 require 'httparty'
 require 'fileutils'
 require 'open3'
+require 'time'
 
 # URL of the README.md file
 readme_url = 'https://raw.githubusercontent.com/saccarosium/awesome-vim9/main/README.md'
@@ -18,7 +19,6 @@ if response.code == 200
   github_repos = readme_content.scan(github_repo_regex).uniq
 
   # Temporary directory for cloning repositories
-  #temp_dir = Dir.mkdir "tmp"
   temp_dir = "tmp/"
 
   # Data collection for the report
@@ -57,9 +57,39 @@ if response.code == 200
   # Clean up the temporary directory
   FileUtils.remove_entry(temp_dir)
 
+  # Calculate summary statistics
+  total_errors = report_data.sum { |data| data[:errors].is_a?(Integer) ? data[:errors] : 0 }
+  total_warnings = report_data.sum { |data| data[:warnings].is_a?(Integer) ? data[:warnings] : 0 }
+  repos_with_no_issues = report_data.count { |data| data[:errors] == 0 && data[:warnings] == 0 }
+
+  # Read existing report if it exists
+  cumulative_report = ""
+  if File.exist?('vinter_report.md')
+    cumulative_report = File.read('vinter_report.md')
+  end
+
+  # Extract existing cumulative list
+  cumulative_list = cumulative_report[/## Cumulative Report\n\n(.*?)(?=\n#|$)/m, 1] || ""
+
+  # Add new entry to the cumulative list
+  timestamp = Time.now.utc.iso8601
+  new_entry = "**#{timestamp}**: Total Errors: #{total_errors}, Total Warnings: #{total_warnings}, Repos with No Issues: #{repos_with_no_issues}\n"
+  cumulative_list += new_entry
+
   # Generate the Markdown report
   markdown_report = <<~MARKDOWN
     # Vinter Analysis Report
+
+    ## Summary
+    Total Errors: #{total_errors}
+    Total Warnings: #{total_warnings}
+    Repos with No Issues: #{repos_with_no_issues}
+
+    ## Cumulative Report
+
+    #{cumulative_list}
+
+    ## Detailed Report
 
     | Repository URL | Errors | Warnings |
     |----------------|--------|----------|

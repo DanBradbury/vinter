@@ -1,14 +1,26 @@
 # Vinter Analysis Report
 
+## Summary
+Total Errors: 1852
+Total Warnings: 2641
+Repos with No Issues: 11
+
+## Cumulative Report
+
+**2025-11-30T06:41:34Z**: Total Errors: 1852, Total Warnings: 2641, Repos with No Issues: 11
+
+
+## Detailed Report
+
 | Repository URL | Errors | Warnings |
 |----------------|--------|----------|
 | https://github.com/kratuvid/vim9-gruvbox | 60 | 0 |
 | https://github.com/zhixiao-zhang/vim-light-pink | 0 | 0 |
 | https://github.com/ShayHill/vim9-scratchterm | 13 | 3 |
-| https://github.com/habamax/vim-shout | 1 | 1 |
+| https://github.com/habamax/vim-shout | 0 | 0 |
 | https://github.com/girishji/vimcomplete | 71 | 83 |
-| https://github.com/girishji/vimsuggest | 104 | 38 |
-| https://github.com/jessepav/vim-camelcomplete | 4 | 6 |
+| https://github.com/girishji/vimsuggest | 105 | 49 |
+| https://github.com/jessepav/vim-camelcomplete | 6 | 8 |
 | https://github.com/mityu/vim-wispath | 0 | 2 |
 | https://github.com/Coacher/vim9-buckler | 2 | 0 |
 | https://github.com/Coacher/vim9-cutlass | 0 | 0 |
@@ -19,11 +31,11 @@
 | https://github.com/ubaldot/vim-writegood | 2 | 0 |
 | https://github.com/habamax/vim-dir | 30 | 10 |
 | https://github.com/nda-cunh/SupraTree | 19 | 5 |
-| https://github.com/saccarosium/vim-netrw-salad | 1 | 0 |
+| https://github.com/saccarosium/vim-netrw-salad | 0 | 0 |
 | https://github.com/ubaldot/vim-open-recent | 0 | 1 |
 | https://github.com/ycm/poplar.vim | 41 | 44 |
 | https://github.com/bfrg/vim-fzy | 10 | 22 |
-| https://github.com/girishji/scope.vim | 16 | 12 |
+| https://github.com/girishji/scope.vim | 15 | 12 |
 | https://github.com/hahdookin/minifuzzy.vim | 7 | 2 |
 | https://github.com/ubaldot/vim-poptools | 17 | 9 |
 | https://github.com/vim-fuzzbox/fuzzbox.vim | 44 | 55 |
@@ -38,13 +50,13 @@
 | https://github.com/sevehub/vim9lua | 4 | 2 |
 | https://github.com/ubaldot/vim-conda-activate | 18 | 33 |
 | https://github.com/ubaldot/vim-manim | 1 | 4 |
-| https://github.com/ubaldot/vim-microdebugger | 2 | 1 |
+| https://github.com/ubaldot/vim-microdebugger | 0 | 0 |
 | https://github.com/ubaldot/vim-replica | 2 | 4 |
 | https://github.com/wolandark/vimdict | 0 | 0 |
-| https://github.com/DanielViberg/lsp | 290 | 169 |
+| https://github.com/DanielViberg/lsp | 293 | 176 |
 | https://github.com/creativenull/vim-lspclient | 73 | 65 |
-| https://github.com/saccarosium/yegappan-lsp-settings | 343 | 0 |
-| https://github.com/yegappan/lsp | 293 | 325 |
+| https://github.com/saccarosium/yegappan-lsp-settings | 107 | 1 |
+| https://github.com/yegappan/lsp | 283 | 322 |
 | https://github.com/lifepillar/vim-colortemplate | 24 | 74 |
 | https://github.com/lifepillar/vim-devel | 24 | 74 |
 | https://github.com/pit-ray/vim-autograd | 44 | 60 |
@@ -53,15 +65,15 @@
 | https://github.com/lacygoill/vim9asm | 7 | 18 |
 | https://github.com/mao-yining/competitest.vim | 60 | 20 |
 | https://github.com/nda-cunh/SupraIcons | 7 | 0 |
-| https://github.com/sevehub/vim9psgrep | 4 | 3 |
+| https://github.com/sevehub/vim9psgrep | 2 | 0 |
 | https://github.com/ubaldot/vim-calendar | 78 | 977 |
 | https://github.com/ubaldot/vim-helpme | 2 | 1 |
 | https://github.com/ubaldot/vim-outline | 7 | 1 |
 | https://github.com/ubaldot/vim9-conversion-aid | 24 | 84 |
 | https://github.com/wolandark/vim-ez-emoji | 0 | 0 |
 | https://github.com/girishji/easyjump.vim | 7 | 22 |
-| https://github.com/girishji/fFtT.vim | 5 | 15 |
-| https://github.com/monkoose/vim9-stargate | 16 | 20 |
+| https://github.com/girishji/fFtT.vim | 5 | 13 |
+| https://github.com/monkoose/vim9-stargate | 15 | 15 |
 | https://github.com/bennyyip/plugpac.vim | 2 | 4 |
 | https://github.com/bfrg/vim-qf-diagnostics | 17 | 1 |
 | https://github.com/bfrg/vim-qf-history | 5 | 0 |
