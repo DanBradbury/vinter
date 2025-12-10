@@ -1,6 +1,6 @@
 Gem::Specification.new do |s|
   s.name        = "vinter"
-  s.version     = "0.6.2"
+  s.version     = "0.6.4"
   s.summary     = "A vim9script linter"
   s.description = "A linter for vim9script"
   s.authors     = ["Dan Bradbury"]

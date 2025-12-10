@@ -146,8 +146,8 @@ module Vinter
 
     def find_config_path
       # check for project level config
-      project_config = Dir.glob(".vinter{.yaml,.yml,}").first
-      project_config if project_config
+      project_config = Dir.glob(".vinter").first
+      return project_config if project_config
 
       # check for user-level config
       user_config = File.expand_path("~/.vinter")

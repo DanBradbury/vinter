@@ -384,6 +384,8 @@ module Vinter
           parse_sleep_command
         when 'source'
           parse_source_command
+        when 'elseif'
+          advance
         else
           @warnings << {
             message: "Unexpected keyword: #{current_token[:value]}",
@@ -410,14 +412,8 @@ module Vinter
         end
       elsif current_token[:type] == :comment
         parse_comment
-      elsif current_token[:type] == :string && current_token[:value].start_with?('"')
-        parse_comment
-        # token = current_token
-        # line = token[:line]
-        # column = token[:column]
-        # value = token[:value]
-        # advance
-        # { type: :comment, value: value, line: line, column: column }
+      #elsif current_token[:type] == :string && current_token[:value].start_with?('"')
+        #parse_comment
       elsif current_token[:type] == :silent_bang
         parse_silent_command
       elsif current_token[:type] == :identifier && current_token[:value] == 'delete'
@@ -442,6 +438,8 @@ module Vinter
         advance
       elsif current_token[:type] == :colon
         parse_command_line_call
+      elsif current_token[:type] == :number
+        advance
       else
         @warnings << {
           message: "Unexpected token type: #{current_token[:type]}",
@@ -1393,7 +1391,7 @@ module Vinter
     end
 
     def parse_type
-      if current_token && [:identifier, :keyword].include?(current_token[:type])
+      if current_token && [:identifier, :keyword, :type].include?(current_token[:type])
         type_name = advance
 
         # Handle generic types like list<string>
@@ -1813,28 +1811,9 @@ module Vinter
               column: column
             }
           end
-        # Legacy Vim allows certain keywords as identifiers in expressions
-        elsif ['return', 'type'].include?(token[:value])
-          # Handle 'return' keyword specially when it appears in an expression context
-          advance
-          @warnings << {
-            message: "Keyword '#{token[:value]}' used in an expression context",
-            position: @position,
-            line: line,
-            column: column
-          }
-          # Check if this is a function call for 'type'
-          if token[:value] == 'type' && current_token && current_token[:type] == :paren_open
-            return parse_function_call(token[:value], line, column)
-          end
-
-          expr = {
-            type: :identifier,
-            name: token[:value],
-            line: line,
-            column: column
-          }
         elsif token[:value] == 'command'
+          advance
+        elsif token[:value] == 'return'
           advance
         else
           @errors << {
@@ -2045,6 +2024,10 @@ module Vinter
           type: :interpolated_string,
           value: token[:value],
         }
+      when :builtin_funcs
+        expr = parse_builtin_function_call
+      when :type
+        advance
       else
         @errors << {
           message: "Unexpected token in expression: #{token[:type]}",
