@@ -26,6 +26,8 @@ if response.code == 200
 
   github_repos.each do |repo_url|
     puts repo_url
+    # skipping since its no longer maintained
+    next if repo_url == "https://github.com/girishji/vimcomplete"
     begin
       # Extract the repo name from the URL
       repo_name = repo_url.split('/').last

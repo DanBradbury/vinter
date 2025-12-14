@@ -386,6 +386,8 @@ module Vinter
           parse_source_command
         when 'elseif'
           advance
+        when 'else'
+          advance
         else
           @warnings << {
             message: "Unexpected keyword: #{current_token[:value]}",
@@ -439,6 +441,24 @@ module Vinter
       elsif current_token[:type] == :colon
         parse_command_line_call
       elsif current_token[:type] == :number
+        advance
+      elsif current_token[:type] == :paren_close
+        advance
+      elsif current_token[:type] == :brace_close
+        advance
+      elsif current_token[:type] == :interpolated_string
+        advance
+      elsif current_token[:type] == :heredoc
+        # TODO: parse_herdoc
+        advance # move past =<<
+        while ["trim", "eval"].include?(current_token[:value])
+          advance
+        end
+        stop_token = advance
+        while current_token && current_token[:value] != stop_token
+          advance
+        end
+      elsif [:bracket_open, :bracket_close, :operator, :question_mark].include?(current_token[:type])
         advance
       else
         @warnings << {
@@ -565,6 +585,12 @@ module Vinter
       name = token[:value]
       advance # Skip the global variable token
 
+      # handle vars that include #
+      while current_token && (current_token[:type] == :comment || current_token[:type] == :identifier)
+        name += current_token[:value]
+        advance
+      end
+
       # Handle property access (e.g., g:foo.bar)
       target = {
         type: :global_variable,
@@ -574,7 +600,7 @@ module Vinter
       }
 
       # Property access (dot notation)
-      if current_token && current_token[:type] == :operator && current_token[:value] == '.'
+      while current_token && current_token[:type] == :operator && current_token[:value] == '.'
         dot_token = advance
         if current_token && (current_token[:type] == :identifier || current_token[:type] == :keyword)
           property_token = advance
@@ -612,7 +638,7 @@ module Vinter
         operator = current_token[:value]
         advance
       else
-        add_error("Expected assignment operator after global variable")
+        add_error("Expected assignment operator after global variable: #{current_token[:type]}")
       end
 
       # Value expression
@@ -786,7 +812,6 @@ module Vinter
     end
 
     def parse_let_statement
-      # binding.pry
       token = advance # Skip 'let'
       line = token[:line]
       column = token[:column]
@@ -1244,7 +1269,8 @@ module Vinter
         if current_token && (current_token[:type] == :identifier ||
                             current_token[:type] == :local_variable ||
                             current_token[:type] == :global_variable ||
-                            current_token[:type] == :script_local)
+                            current_token[:type] == :script_local ||
+                            current_token[:type] == :builtin_funcs)
           loop_var = advance
         else
           add_error("Expected identifier as for loop variable")
@@ -1284,7 +1310,15 @@ module Vinter
       line = token[:line]
       column = token[:column]
 
-      name = expect(:identifier)
+      if current_token && current_token[:value] == "!"
+        advance
+      end
+
+
+      if current_token && [:identifier, :global_variable].include?(current_token[:type])
+        name = advance
+      end
+      #name = expect(:identifier)
 
       # Parse parameter list
       expect(:paren_open)
@@ -1411,7 +1445,7 @@ module Vinter
 
         return type_name[:value]
       else
-        add_error("Expected type identifier")
+        add_error("Expected type identifier: #{current_token[:value]}, #{current_token[:type]}")
         advance
         return "unknown"
       end
@@ -1423,13 +1457,21 @@ module Vinter
       line = var_type_token[:line]
       column = var_type_token[:column]
 
-      if !current_token || current_token[:type] != :identifier
-        add_error("Expected variable name")
+      # TODO: also handle the variable declration with [a,b]
+      if current_token[:type] == :bracket_open
+        advance
+        name = "[#{current_token[:value]}"
+        while current_token && current_token[:type] != :bracket_close
+          advance
+          name += current_token[:value]
+        end
+      elsif !current_token || current_token[:type] != :identifier
+        add_error("Expected variable name: #{current_token[:type]}")
         return nil
+      else
+        name_token = advance
+        name = name_token[:value]
       end
-
-      name_token = advance
-      name = name_token[:value]
 
       # Parse optional type annotation
       var_type_annotation = nil
@@ -1523,14 +1565,13 @@ module Vinter
     end
 
     def parse_expression
-      # binding.pry
       # Special case for empty return statements or standalone keywords that shouldn't be expressions
       if current_token && current_token[:type] == :keyword &&
          ['return', 'endif', 'endwhile', 'endfor', 'endfunction', 'endfunc'].include?(current_token[:value])
         return nil
       end
 
-      if current_token[:type] == :string
+      if current_token && current_token[:type] == :string
         string_value = current_token[:value]
         while current_token && peek_token && [:line_continuation, :identifier].include?(peek_token[:type])
           # Handle strings with line continuation
@@ -1556,36 +1597,14 @@ module Vinter
       expr = parse_binary_expression
 
       # Check if this is a ternary expression
-      if current_token && (current_token[:type] == :question_mark || (current_token[:type] == :operator && current_token[:value] == '?'))
+      if current_token && (current_token[:type] == :question_mark && peek_token[:type] != :question_mark || (current_token[:type] == :operator && current_token[:value] == '?'))
         question_token = advance # Skip '?'
-
-        # Parse the "then" expression
-        then_expr = parse_expression
-
-        # Expect the colon
-        if current_token && current_token[:type] == :colon
-          colon_token = advance # Skip ':'
-
-          # Parse the "else" expression
-          else_expr = parse_expression
-
-          # Return the ternary expression
-          return {
-            type: :ternary_expression,
-            condition: expr,
-            then_expr: then_expr,
-            else_expr: else_expr,
-            line: question_token[:line],
-            column: question_token[:column]
-          }
-        else
-          @errors << {
-            message: "Expected ':' in ternary expression",
-            position: @position,
-            line: current_token ? current_token[:line] : 0,
-            column: current_token ? current_token[:column] : 0
-          }
+        while current_token[:value] != ':'
+          advance
         end
+        advance # skip :
+
+        parse_expression
       end
 
       return expr
@@ -1792,9 +1811,18 @@ module Vinter
                 line: line,
                 column: column
               }
+            elsif current_token && current_token[:type] == :option_variable
+              option_var = advance
+              expect(:paren_close)
+              return {
+                type: :function_reference,
+                function_body: option_var[:value],
+                line: line,
+                column: column
+              }
             else
               @errors << {
-                message: "Expected string or arrow function definition in function() call",
+                message: "Expected string or arrow function definition in function() call: #{current_token}",
                 position: @position,
                 line: current_token ? current_token[:line] : 0,
                 column: current_token ? current_token[:column] : 0
@@ -1814,6 +1842,8 @@ module Vinter
         elsif token[:value] == 'command'
           advance
         elsif token[:value] == 'return'
+          advance
+        elsif token[:value] == 'elseif'
           advance
         else
           @errors << {
@@ -1995,8 +2025,18 @@ module Vinter
           return parse_lambda_expression(line, column)
         else
           advance  # Skip '('
-          expr = parse_expression
-          expect(:paren_close)  # Expect and skip ')'
+          required_parens = 1
+          while current_token && required_parens > 0
+            if current_token[:type] == :paren_open
+              required_parens += 1
+            elsif current_token[:type] == :paren_close
+              required_parens -= 1
+            end
+            advance
+          end
+          #expr = parse_expression
+          #binding.pry
+          #expect(:paren_close)  # Expect and skip ')'
         end
       when :bracket_open
         expr = parse_list_literal(line, column)
@@ -2028,9 +2068,19 @@ module Vinter
         expr = parse_builtin_function_call
       when :type
         advance
+      when :colon
+        advance
+      when :operator
+        advance
+      when :silent_bang
+        advance
+      when :question_mark
+        advance
+      when :comment, :compound_operator
+        advance
       else
         @errors << {
-          message: "Unexpected token in expression: #{token[:type]}",
+          message: "Unexpected token in expression: #{token[:type]} | #{token[:value]}",
           position: @position,
           line: line,
           column: column
@@ -2087,7 +2137,9 @@ module Vinter
           advance if current_token[:type] == :line_continuation
 
           # Next token should be an identifier (method name)
-          if !current_token || current_token[:type] != :identifier
+          if current_token && current_token[:type] == :builtin_funcs
+            parse_builtin_function_call
+          elsif !current_token || current_token[:type] != :identifier
             @errors << {
               message: "Expected method name after '->'",
               position: @position,
@@ -2102,23 +2154,15 @@ module Vinter
           # Check for arguments
           args = []
           if current_token && current_token[:type] == :paren_open
-            expect(:paren_open) # Skip '('
-
-            # Parse arguments if any
-            unless current_token && current_token[:type] == :paren_close
-              loop do
-                arg = parse_expression
-                args << arg if arg
-
-                if current_token && current_token[:type] == :comma
-                  advance # Skip comma
-                else
-                  break
-                end
+            paren_count = 1
+            while current_token && paren_count > 0
+              if current_token[:type] == :paren_open
+                paren_count += 1
+              elsif current_token[:type] == :paren_close
+                paren_count -= 1
               end
+              advance
             end
-
-            expect(:paren_close) # Skip ')'
           end
 
           expr = {
@@ -2223,17 +2267,29 @@ module Vinter
       column = token[:column]
       name = token[:value]
 
-      # Collect arguments (if any) until the end of the line
-      args = []
-      while current_token && current_token[:type] != :comment && current_token[:value] != "\n"
-        args << current_token[:value]
+      #expect(:paren_open)
+      required_parens = 1
+      while current_token && required_parens > 0
+        if current_token[:type] == :paren_close
+          required_parens -= 1
+        elsif current_token[:type] == :paren_open
+          required_parens += 1
+        end
         advance
       end
+
+      # Collect arguments (if any) until the end of the line
+      #args = []
+      #while current_token && current_token[:type] != :comment && current_token[:value] != "\n"
+        #puts current_token[:value]
+        #args << current_token[:value]
+        #advance
+      #end
 
       {
         type: :builtin_function_call,
         name: name,
-        arguments: args,
+        #arguments: args,
         line: line,
         column: column
       }
@@ -2623,7 +2679,7 @@ module Vinter
           # Skip any line continuations and whitespace after comma
           while current_token && (current_token[:type] == :whitespace ||
                                  current_token[:type] == :backslash ||
-                                 current_token[:type] == :line_continuation)
+                                 current_token[:type] == :line_continuation || current_token[:type] == :comment)
             advance
           end
         else
@@ -2808,7 +2864,7 @@ module Vinter
         # If we have a comma, advance past it and continue
         if current_token && current_token[:type] == :comma
           advance
-        elsif current_token[:type] == :line_continuation
+        elsif current_token && current_token[:type] == :line_continuation
           advance
         # If we don't have a comma and we're not at the end, it's an error
         elsif current_token && current_token[:type] != :paren_close
