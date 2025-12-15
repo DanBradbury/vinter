@@ -388,6 +388,8 @@ module Vinter
           advance
         when 'else'
           advance
+        when 'class'
+          parse_class_definition
         else
           @warnings << {
             message: "Unexpected keyword: #{current_token[:value]}",
@@ -1323,7 +1325,6 @@ module Vinter
       # Parse parameter list
       expect(:paren_open)
       params = parse_parameter_list
-      expect(:paren_close)
 
       # Parse optional return type
       return_type = nil
@@ -1356,70 +1357,80 @@ module Vinter
       if current_token && current_token[:type] == :paren_close
         return params
       end
+      # TODO actually save params
+      required_parens = 1
+      while current_token && required_parens > 1
+        if current_token[:type] == :paren_open
+          required_parens += 1
+        elsif current_token[:type] == :paren_close
+          required_parens -= 1
+        end
+        advance
+      end
 
       # Parse parameters until we find a closing parenthesis
-      while @position < @tokens.length && current_token && current_token[:type] != :paren_close
-        # Check for variable args
-        if current_token && current_token[:type] == :ellipsis
-          ellipsis_token = advance
+      #while @position < @tokens.length && current_token && current_token[:type] != :paren_close
+        ## Check for variable args
+        #if current_token && current_token[:type] == :ellipsis
+          #ellipsis_token = advance
 
-          # Parse type for variable args if present
-          param_type = nil
-          if current_token && current_token[:type] == :colon
-            advance # Skip ':'
-            param_type = parse_type
-          end
+          ## Parse type for variable args if present
+          #param_type = nil
+          #if current_token && current_token[:type] == :colon
+            #advance # Skip ':'
+            #param_type = parse_type
+          #end
 
-          params << {
-            type: :var_args,
-            param_type: param_type,
-            line: ellipsis_token[:line],
-            column: ellipsis_token[:column]
-          }
+          #params << {
+            #type: :var_args,
+            #param_type: param_type,
+            #line: ellipsis_token[:line],
+            #column: ellipsis_token[:column]
+          #}
 
-          # After varargs, we expect closing paren
-          if current_token && current_token[:type] != :paren_close
-            add_error("Expected closing parenthesis after varargs", current_token)
-          end
+          ## After varargs, we expect closing paren
+          #if current_token && current_token[:type] != :paren_close
+            #add_error("Expected closing parenthesis after varargs", current_token)
+          #end
 
-          break
-        end
+          #break
+        #end
 
-        param_name = advance
+        #param_name = advance
 
-        # Check for type annotation
-        param_type = nil
-        if current_token && current_token[:type] == :colon
-          advance # Skip ':'
-          param_type = parse_type
-        end
+        ## Check for type annotation
+        #param_type = nil
+        #if current_token && current_token[:type] == :colon
+          #advance # Skip ':'
+          #param_type = parse_type
+        #end
 
-        # Check for default value
-        default_value = nil
-        if current_token && current_token[:type] == :operator && current_token[:value] == '='
-          advance # Skip '='
-          default_value = parse_expression
-        end
+        ## Check for default value
+        #default_value = nil
+        #if current_token && current_token[:type] == :operator && current_token[:value] == '='
+          #advance # Skip '='
+          #default_value = parse_expression
+        #end
 
-        params << {
-          type: :parameter,
-          name: param_name[:value],
-          param_type: param_type,
-          optional: default_value != nil,
-          default_value: default_value,
-          line: param_name[:line],
-          column: param_name[:column]
-        }
+        #params << {
+          #type: :parameter,
+          #name: param_name[:value],
+          #param_type: param_type,
+          #optional: default_value != nil,
+          #default_value: default_value,
+          #line: param_name[:line],
+          #column: param_name[:column]
+        #}
 
-        # If we have a comma, advance past it and continue
-        if current_token && current_token[:type] == :comma
-          advance
-        # If we don't have a comma, we should have a closing paren
-        elsif current_token && current_token[:type] != :paren_close
-          add_error("Expected comma or closing parenthesis after parameter", current_token)
-          break
-        end
-      end
+        ## If we have a comma, advance past it and continue
+        #if current_token && current_token[:type] == :comma
+          #advance
+        ## If we don't have a comma, we should have a closing paren
+        #elsif current_token && current_token[:type] != :paren_close
+          #add_error("Expected comma or closing parenthesis after parameter", current_token)
+          #break
+        #end
+      #end
 
       params
     end
@@ -2076,7 +2087,7 @@ module Vinter
         advance
       when :question_mark
         advance
-      when :comment, :compound_operator
+      when :comment, :compound_operator, :bracket_close
         advance
       else
         @errors << {
@@ -2603,7 +2614,7 @@ module Vinter
       # Parse dictionary entries
       while current_token && current_token[:type] != :brace_close
         # Skip any backslash line continuation markers and whitespace
-        while current_token && (current_token[:type] == :backslash || current_token[:type] == :whitespace || current_token[:type] == :line_continuation)
+        while current_token && [:backslash, :whitespace, :line_continuation, :comment].include?(current_token[:type])
           advance
         end
 
@@ -2614,12 +2625,12 @@ module Vinter
 
         # Parse key (string or identifier)
         key = nil
-        if current_token && (current_token[:type] == :string || current_token[:type] == :identifier)
+        if current_token && [:string, :identifier, :keyword].include?(current_token[:type])
           key = current_token[:value]
           advance  # Skip key
         else
           @errors << {
-            message: "Expected string or identifier as dictionary key",
+            message: "Expected string or identifier as dictionary key #{current_token}",
             position: @position,
             line: current_token ? current_token[:line] : 0,
             column: current_token ? current_token[:column] : 0
@@ -2845,40 +2856,16 @@ module Vinter
       args = []
 
       # Parse arguments until we find a closing parenthesis
-      while @position < @tokens.length && current_token && current_token[:type] != :paren_close
-        # Skip line continuations
-        if current_token[:type] == :line_continuation
-          advance
-          next
-        end
 
-        # Parse the argument
-        arg = parse_expression
-        args << arg if arg
-
-        # Break if we hit the closing parenthesis
-        if current_token && current_token[:type] == :paren_close
-          break
+      required_parens = 1
+      while current_token && required_parens > 0
+        if current_token[:type] == :paren_open
+          required_parens += 1
+        elsif current_token[:type] == :paren_open
+          required_parens -= 1
         end
-
-        # If we have a comma, advance past it and continue
-        if current_token && current_token[:type] == :comma
-          advance
-        elsif current_token && current_token[:type] == :line_continuation
-          advance
-        # If we don't have a comma and we're not at the end, it's an error
-        elsif current_token && current_token[:type] != :paren_close
-          @errors << {
-            message: "Expected comma or closing parenthesis after argument",
-            position: @position,
-            line: current_token[:line],
-            column: current_token[:column]
-          }
-          break
-        end
+        advance
       end
-
-      expect(:paren_close)
 
       {
         type: :function_call,
@@ -2985,9 +2972,10 @@ module Vinter
 
       # Handle 'as name'
       as_name = nil
-      if current_token && current_token[:type] == :identifier && current_token[:value] == 'as'
+      if current_token && current_token[:value] == 'as'
         advance # Skip 'as'
-        if current_token && current_token[:type] == :identifier
+
+        if current_token && [:identifier, :keyword].include?(current_token[:type])
           as_name = advance[:value]
         else
           @errors << {
@@ -3034,7 +3022,7 @@ module Vinter
 
       exported_item = nil
 
-      if current_token[:type] == :keyword
+      if current_token[:type] == :keyword || current_token[:type] == :identifier
         case current_token[:value]
         when 'def'
           exported_item = parse_def_function
@@ -3043,15 +3031,13 @@ module Vinter
         when 'var', 'const', 'final'
           exported_item = parse_variable_declaration
         when 'class'
-          # Handle class export when implemented
-          @errors << {
-            message: "Class export not implemented yet",
-            position: @position,
-            line: current_token[:line],
-            column: current_token[:column]
-          }
+          exported_item = parse_class_definition
+        when 'interface'
+          exported_item = parse_interface_definition
+        when 'enum'
+          exported_item = parse_enum_definition
+        when 'abstract'
           advance
-          return nil
         else
           @errors << {
             message: "Unexpected keyword after export: #{current_token[:value]}",
@@ -3078,6 +3064,34 @@ module Vinter
         export: exported_item,
         line: line,
         column: column
+      }
+    end
+
+    def parse_enum_definition
+      while current_token && current_token[:value] != "endenum"
+        advance
+      end
+      {
+        type: :enum_definition,
+      }
+    end
+
+    def parse_interface_definition
+      while current_token && current_token[:value] != "endinterface"
+        advance
+      end
+      {
+        type: :interface_definition,
+      }
+    end
+
+    def parse_class_definition
+      # TODO: do this properly.. for now we will just look for endclass
+      while current_token && current_token[:value] != "endclass"
+        advance
+      end
+      {
+        type: :class_definition,
       }
     end
 

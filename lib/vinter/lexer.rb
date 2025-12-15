@@ -629,7 +629,7 @@ module Vinter
       }
 
       return true if recent_tokens.any? { |t|
-        t && t[:type] == :identifier && ['match', 'region', 'keyword'].include?(t[:value])
+        t && t[:type] == :identifier && ['region', 'keyword'].include?(t[:value])
       }
 
       # Check for comparison operators that often use regex
