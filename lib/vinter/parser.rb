@@ -1316,7 +1316,6 @@ module Vinter
         advance
       end
 
-
       if current_token && [:identifier, :global_variable].include?(current_token[:type])
         name = advance
       end
@@ -1332,12 +1331,12 @@ module Vinter
         advance # Skip ':'
         return_type = parse_type
       end
-
-      # Parse function body until 'enddef'
-      body = parse_body_until('enddef')
-
-      # Expect enddef
-      expect_end_keyword('enddef')
+      body = []
+      while current_token && current_token[:value] != 'enddef'
+        body << current_token
+        advance
+      end
+      advance
 
       {
         type: :def_function,
@@ -1355,6 +1354,7 @@ module Vinter
 
       # Empty parameter list
       if current_token && current_token[:type] == :paren_close
+        advance
         return params
       end
       # TODO actually save params
