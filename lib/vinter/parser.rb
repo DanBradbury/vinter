@@ -1333,8 +1333,8 @@ module Vinter
       end
       body = []
       while current_token && current_token[:value] != 'enddef'
-        body << current_token
-        advance
+        stmt = parse_statement
+        body << stmt if stmt
       end
       advance
 
@@ -1359,7 +1359,7 @@ module Vinter
       end
       # TODO actually save params
       required_parens = 1
-      while current_token && required_parens > 1
+      while current_token && required_parens > 0
         if current_token[:type] == :paren_open
           required_parens += 1
         elsif current_token[:type] == :paren_close
@@ -1495,7 +1495,10 @@ module Vinter
       initializer = nil
       if current_token && (current_token[:type] == :operator && current_token[:value] == '=')
         advance # Skip '='
-        initializer = parse_expression
+        assignment_line = current_token[:line]
+        while current_token[:line] == assignment_line
+          advance
+        end
       end
 
       {
@@ -2861,7 +2864,7 @@ module Vinter
       while current_token && required_parens > 0
         if current_token[:type] == :paren_open
           required_parens += 1
-        elsif current_token[:type] == :paren_open
+        elsif current_token[:type] == :paren_close
           required_parens -= 1
         end
         advance
