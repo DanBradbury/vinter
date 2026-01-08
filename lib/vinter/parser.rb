@@ -1,4 +1,3 @@
-require 'pry'
 module Vinter
   class Parser
     def initialize(tokens, source_text = nil)
@@ -409,8 +408,6 @@ module Vinter
           parse_autocmd_statement
         elsif current_token[:value] == "filter" || current_token[:value] == "filt"
           parse_filter_command
-        elsif current_token[:value] == "command"
-          parse_command_definition
         else
           parse_expression_statement
         end
@@ -461,6 +458,10 @@ module Vinter
           advance
         end
       elsif [:bracket_open, :bracket_close, :operator, :question_mark].include?(current_token[:type])
+        advance
+      elsif current_token[:type] == :mode_command
+        advance
+      elsif current_token[:type] == :exec_command
         advance
       else
         @warnings << {

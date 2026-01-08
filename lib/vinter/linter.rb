@@ -24,19 +24,6 @@ module Vinter
         end
       end)
 
-      # Rule: Prefer def over function in Vim9 script
-      register_rule(Rule.new("prefer-def-over-function", "Use def instead of function in Vim9 script") do |ast|
-        issues = []
-
-        traverse_ast(ast) do |node|
-          if node[:type] == :legacy_function
-            issues << { message: "Use def instead of function for #{node[:name]}", line: node[:line] || 0, column: node[:column] || 0 }
-          end
-        end
-
-        issues
-      end)
-
       # Rule: Variables should have type annotations
       register_rule(Rule.new("missing-type-annotation", "Variable declaration is missing type annotation") do |ast|
         issues = []
@@ -73,6 +60,21 @@ module Vinter
               if param[:type] == :parameter && param[:param_type].nil?
                 issues << { message: "Parameter #{param[:name]} should have a type annotation", line: param[:line] || 0, column: param[:column] || 0 }
               end
+            end
+          end
+        end
+
+        issues
+      end)
+
+      # Rule: should use the full name of commands that have abbreviations
+      register_rule(Rule.new("use-full-name", "Dont use partial names for commands") do |ast|
+        issues = []
+
+        traverse_ast(ast) do |node|
+          if node[:type] == :exec_command
+            unless node[:value].start_with?("execute")
+              issues << { message: "Use of execute command should use the full name", line: node[:line] }
             end
           end
         end

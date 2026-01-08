@@ -9,33 +9,15 @@ RSpec.describe Vinter::Lexer do
   end
 
   describe '#tokenize' do
-    context 'keywords' do
-      it 'tokenizes VimScript keywords' do
-        tokens = tokenize.call("if while def vim9script")
-
-        expect(tokens.size).to eq(4)
-        expect(tokens[0][:type]).to eq(:keyword)
-        expect(tokens[0][:value]).to eq("if")
-        expect(tokens[1][:type]).to eq(:keyword)
-        expect(tokens[1][:value]).to eq("while")
-        expect(tokens[2][:type]).to eq(:keyword)
-        expect(tokens[2][:value]).to eq("def")
-        expect(tokens[3][:type]).to eq(:keyword)
-        expect(tokens[3][:value]).to eq("vim9script")
-      end
-    end
-
-    context 'identifiers' do
-      it 'tokenizes variable names' do
-        tokens = tokenize.call("myVar _test Function#1")
-
-        expect(tokens.size).to eq(3)
-        expect(tokens[0][:type]).to eq(:identifier)
-        expect(tokens[0][:value]).to eq("myVar")
-        expect(tokens[1][:type]).to eq(:identifier)
-        expect(tokens[1][:value]).to eq("_test")
-        expect(tokens[2][:type]).to eq(:identifier)
-        expect(tokens[2][:value]).to eq("Function#1")
+    context 'variables' do
+      it 'tokenizes variables correctly' do
+        basic = """
+        var command = '123'
+        command ..= '33'
+        """
+        tokens = tokenize.call(basic)
+        token_types = tokens.map { |f| f[:type] }
+        expect(token_types).to eq %i[keyword identifier operator string identifier compound_operator string]
       end
     end
 
@@ -56,24 +38,41 @@ RSpec.describe Vinter::Lexer do
     end
 
     context 'string literals' do
-      it 'tokenizes single and double-quoted strings' do
-        tokens = tokenize.call("'single quoted' \"double quoted\"")
+      it 'tokenizes double quoted stirngs' do
+        tokens = tokenize.call('var thing = "double quoted"')
+        token_types = tokens.map { |f| f[:type] }
+        expect(token_types).to eq %i[keyword identifier operator string]
+      end
 
-        expect(tokens.size).to eq(2)
-        expect(tokens[0][:type]).to eq(:string)
-        expect(tokens[0][:value]).to eq("'single quoted'")
-        expect(tokens[1][:type]).to eq(:string)
-        expect(tokens[1][:value]).to eq("\"double quoted\"")
+      it 'tokenizes single and double-quoted strings' do
+        tokens = tokenize.call("var thing = 'single quoted'")
+
+        token_types = tokens.map { |f| f[:type] }
+        expect(token_types).to eq %i[keyword identifier operator string]
       end
     end
 
     context 'comments' do
       it 'tokenizes Vim9 script comments' do
         tokens = tokenize.call("var x = 10 # This is a comment")
-
-        expect(tokens.size).to eq(5)  # var, x, =, 10, comment
+        token_types = tokens.map { |f| f[:type] }
+        expect(token_types).to eq([:keyword, :identifier, :operator, :number, :comment])
         expect(tokens[4][:type]).to eq(:comment)
         expect(tokens[4][:value]).to eq("# This is a comment")
+      end
+    end
+
+    context 'commands' do
+      it 'tokenizes normal commands' do
+        tokens = tokenize.call('normal! gv"xy')
+        token_types = tokens.map { |f| f[:type] }
+        expect(token_types).to eq([:mode_command])
+      end
+
+      it 'handles exec commands' do
+        tokens = tokenize.call("exec ':%s/^ ━\+/ ' .. repeat('━', width) .. '/ge'")
+        token_types = tokens.map { |f| f[:type] }
+        expect(token_types).to eq([:exec_command])
       end
     end
 

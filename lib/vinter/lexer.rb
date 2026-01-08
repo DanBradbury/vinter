@@ -582,6 +582,8 @@ module Vinter
       encodings: /\b(latin1|iso|koi8|macroman|cp437|cp737|cp775|cp850|cp852|cp855|cp857|cp860|cp861|cp862|cp863|cp865|cp866|cp869|cp874|cp1250|cp1251|cp1253|cp1254|cp1255|cp1256|cp1257|cp1258|cp932|euc\-jp|sjis|cp949|euc\-kr|cp936|euc\-cn|cp950|big5|euc\-tw|utf\-8|ucs\-2|ucs\-21e|utf\-16|utf\-16le|ucs\-4|ucs\-4le|ansi|japan|korea|prc|chinese|taiwan|utf8|unicode|ucs2be|ucs\-2be|ucs\-4be|utf\-32|utf\-32le)\b/,
       #builtin_funcs: /\b(highlight||normal!|normal|filter|match|extend|redraw!|setbufline)\b/,
       type: /\b(number|list|dict|void|string)\b/,
+      mode_command: /\b(?:normal|norm)(?:!)?(?!\w).*$/,
+      exec_command: /\b(?:execute|exec).*$/,
       builtin_funcs: /\b(#{Regexp.union(BUILTINS).source})\b/,
       # Identifiers can include # and special characters
       heredoc: /=<</,
@@ -614,6 +616,7 @@ module Vinter
     def initialize(input)
       @input = input
       @tokens = []
+      @variables = []
       @position = 0
       @line_num = 1
       @column = 1
@@ -847,19 +850,6 @@ module Vinter
           next
         end
 
-        # Check for keywords first, before other token types
-        if match = chunk.match(/\A\b(if|else|elseif|endif|while|endwhile|for|endfor|def|enddef|function|endfunction|endfunc|return|const|var|final|import|export|class|extends|static|enum|vim9script|abort|autocmd|echoerr|echohl|echomsg|let|unlet|var|setlocal|syntax|highlight|sleep|source)\b/)
-          @tokens << {
-            type: :keyword,
-            value: match[0],
-            line: @line_num,
-            column: @column
-          }
-          @column += match[0].length
-          @position += match[0].length
-          next
-        end
-
         # Handle Vim scoped option variables with &l: or &g: prefix
         if match = chunk.match(/\A&[lg]:[a-zA-Z_][a-zA-Z0-9_]*/)
           @tokens << {
@@ -1006,6 +996,9 @@ module Vinter
 
         # Handle compound assignment operators
         if match = chunk.match(/\A(\+=|-=|\*=|\/=|\.\.=|\.=)/)
+          if @tokens.last[:type] == :keyword && @variables.include?(@tokens.last[:value])
+            @tokens.last[:type] = :identifier
+          end
           @tokens << {
             type: :compound_operator,
             value: match[0],
@@ -1136,52 +1129,6 @@ module Vinter
           next
         end
 
-        # Handle backslash for line continuation
-        if chunk.start_with?('\\')
-          @tokens << {
-            type: :line_continuation,
-            value: '\\',
-            line: @line_num,
-            column: @column
-          }
-          @column += 1
-          @position += 1
-
-          # If followed by a newline, advance to the next line
-          if @position < @input.length && @input[@position] == "\n"
-            @line_num += 1
-            @column = 1
-            @position += 1
-          end
-
-          # Skip whitespace after the continuation
-          while @position < @input.length && @input[@position] =~ /\s/
-            if @input[@position] == "\n"
-              @line_num += 1
-              @column = 1
-            else
-              @column += 1
-            end
-            @position += 1
-          end
-
-          next
-        end
-
-        # Check for special case where 'function' is followed by '('
-        # which likely means it's used as a built-in function
-        if chunk =~ /\Afunction\s*\(/
-          @tokens << {
-            type: :identifier,  # Treat as identifier, not keyword
-            value: 'function',
-            line: @line_num,
-            column: @column
-          }
-          @column += 'function'.length
-          @position += 'function'.length
-          next
-        end
-
         match_found = false
 
         TOKEN_TYPES.each do |type, pattern|
@@ -1193,6 +1140,16 @@ module Vinter
               line: @line_num,
               column: @column
             }
+
+            # handling variable names that are also keywords
+            if !@tokens.empty? && @tokens.last[:value] == 'var'
+              @variables << value
+              token[:type] = :identifier
+            end
+
+            #if type != :whitespace
+              #@tokens << token
+            #end
             @tokens << token unless type == :whitespace
 
             # Update position
